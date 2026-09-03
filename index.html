@@ -195,6 +195,16 @@
     color:var(--muted);font-size:13.5px;cursor:pointer;
   }
 
+  .sharebar{margin-top:22px;padding-top:2px;}
+  .sharebtn{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;padding:13px;border-radius:12px;border:none;
+    background:linear-gradient(180deg, var(--accent2), #256aa3);color:#ffffff;
+    font-size:14.5px;font-weight:700;cursor:pointer;
+  }
+  .sharebtn:active{opacity:.85;}
+  .sharebtn svg{width:17px;height:17px;flex-shrink:0;}
+
 </style>
 </head>
 <body>
@@ -295,6 +305,13 @@
 
     <div class="reset" id="resetBtn">בדוק סרטון נוסף</div>
   </div>
+
+  <div class="sharebar">
+    <button type="button" class="sharebtn" id="shareBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
+      <span id="shareBtnLabel">שתפו את הכלי הזה</span>
+    </button>
+  </div>
 </div>
 
 <script>
@@ -329,6 +346,8 @@
   const strDetails=document.getElementById('strDetails');
   const strlist=document.getElementById('strlist');
   const resetBtn=document.getElementById('resetBtn');
+  const shareBtn=document.getElementById('shareBtn');
+  const shareBtnLabel=document.getElementById('shareBtnLabel');
   const framesTitleEl=document.getElementById('framesTitle');
   const infoBtn=document.getElementById('infoBtn');
   const infoPanel=document.getElementById('infoPanel');
@@ -368,6 +387,31 @@
     fileInput.value='';
     urlInput.value='';
     window.scrollTo({top:0,behavior:'smooth'});
+  };
+
+  // ---------- Share ----------
+  const shareData={
+    title:document.title,
+    text:'גלאי תוכן AI — בודקים אם סרטון או תמונה נוצרו בכלי AI, ישירות בדפדפן.',
+    url:location.href
+  };
+  function flashShareLabel(msg){
+    const original=shareBtnLabel.textContent;
+    shareBtnLabel.textContent=msg;
+    setTimeout(()=>{ shareBtnLabel.textContent=original; },2200);
+  }
+  shareBtn.onclick=async()=>{
+    if(navigator.share){
+      try{ await navigator.share(shareData); }
+      catch(err){ /* user cancelled the native share sheet */ }
+      return;
+    }
+    try{
+      await navigator.clipboard.writeText(shareData.url);
+      flashShareLabel('הקישור הועתק ✓');
+    }catch(err){
+      window.prompt('העתיקו את הקישור:', shareData.url);
+    }
   };
 
   function fmtBytes(b){
