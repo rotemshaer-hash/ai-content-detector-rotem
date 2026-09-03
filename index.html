@@ -41,9 +41,14 @@
   h1{font-size:26px;margin:0;line-height:1.25;}
   h1 span{color:var(--accent);}
   .infobtn{
+    position:relative;
     width:26px;height:26px;border-radius:50%;flex-shrink:0;
     background:var(--panel);border:1px solid var(--border);color:var(--muted);
     font-size:14px;line-height:1;cursor:pointer;padding:0;
+  }
+  .infobtn::after{
+    content:'';position:absolute;top:50%;left:50%;
+    width:44px;height:44px;transform:translate(-50%,-50%);
   }
   .infobtn[aria-expanded="true"]{background:var(--panel2);color:var(--accent);border-color:var(--accent);}
   .infopanel{
