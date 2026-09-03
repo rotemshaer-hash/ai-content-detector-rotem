@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>גלאי תוכן AI</title>
+<style>
+  :root{
+    --bg:#e7eef2;
+    --bg2:#d9e3e9;
+    --panel:#ffffff;
+    --panel2:#eef3f6;
+    --border:#c7d5dc;
+    --text:#1b2a33;
+    --muted:#5c7078;
+    --accent:#0d8f82;
+    --accent2:#2f7dc0;
+    --warn:#a6650a;
+    --bad:#c93a4d;
+    --good:#0d8f82;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,Helvetica,sans-serif;}
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(13,143,130,0.07), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, rgba(47,125,192,0.07), transparent 55%),
+      var(--bg);
+    padding-bottom:60px;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:22px 16px 0;}
+  header{padding:6px 0 18px;}
+  .titlerow{display:flex;align-items:center;justify-content:flex-end;gap:8px;}
+  h1{font-size:26px;margin:0;line-height:1.25;}
+  h1 span{color:var(--accent);}
+  .infobtn{
+    width:26px;height:26px;border-radius:50%;flex-shrink:0;
+    background:var(--panel);border:1px solid var(--border);color:var(--muted);
+    font-size:14px;line-height:1;cursor:pointer;padding:0;
+  }
+  .infobtn[aria-expanded="true"]{background:var(--panel2);color:var(--accent);border-color:var(--accent);}
+  .infopanel{
+    margin-top:10px;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    padding:12px 14px;font-size:13px;line-height:1.7;color:var(--muted);
+  }
+  .infopanel b{color:var(--text);}
+
+  .tabs{display:flex;gap:8px;margin-top:22px;}
+  .tab{
+    flex:1;text-align:center;padding:11px 8px;border-radius:12px;
+    background:var(--panel);border:1px solid var(--border);color:var(--muted);
+    font-size:14px;cursor:pointer;user-select:none;font-weight:600;
+    transition:.15s;
+  }
+  .tab.active{
+    background:linear-gradient(180deg, rgba(13,143,130,0.16), rgba(13,143,130,0.05));
+    border-color:rgba(13,143,130,0.45);color:var(--text);
+  }
+
+  .panel{
+    background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    padding:20px 16px;margin-top:14px;
+  }
+
+  .dropzone{
+    border:1.5px dashed #9db2bc;border-radius:14px;padding:32px 16px;
+    text-align:center;cursor:pointer;background:var(--bg2);transition:.15s;
+  }
+  .dropzone.drag{border-color:var(--accent);background:rgba(13,143,130,0.08);}
+  .dropzone .icon{font-size:30px;margin-bottom:10px;color:var(--accent2);}
+  .dropzone p{margin:4px 0;color:var(--text);font-size:15px;}
+  .dropzone small{color:var(--muted);font-size:12.5px;}
+  input[type=file]{display:none;}
+
+  .urlrow{display:flex;gap:8px;}
+  .urlrow input[type=text]{
+    flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text);
+    border-radius:10px;padding:12px 12px;font-size:14.5px;direction:ltr;text-align:left;
+  }
+  .urlrow input[type=text]:focus{outline:none;border-color:var(--accent2);}
+  .btn{
+    background:linear-gradient(180deg, var(--accent), #0a6f65);color:#ffffff;border:none;
+    border-radius:10px;padding:12px 18px;font-size:14.5px;font-weight:700;cursor:pointer;
+  }
+  .btn:disabled{opacity:.5;cursor:default;}
+  .btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
+  .urlhint{color:var(--muted);font-size:12.5px;margin-top:10px;line-height:1.6;}
+
+  .filepill{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+    padding:10px 12px;margin-top:12px;font-size:13.5px;
+  }
+  .filepill .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+  .filepill .size{color:var(--muted);font-family:var(--mono);font-size:12px;flex-shrink:0;direction:ltr;}
+
+  .status{
+    margin-top:16px;display:none;
+  }
+  .status.show{display:block;}
+  .statusline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13.5px;margin-bottom:8px;}
+  .spinner{
+    width:15px;height:15px;border-radius:50%;
+    border:2px solid rgba(13,143,130,0.25);border-top-color:var(--accent);
+    animation:spin 0.8s linear infinite;flex-shrink:0;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .progtrack{height:5px;border-radius:99px;background:var(--bg2);overflow:hidden;}
+  .progfill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .25s;}
+
+  .errbox{
+    margin-top:16px;background:rgba(201,58,77,0.08);border:1px solid rgba(201,58,77,0.3);
+    border-radius:12px;padding:14px;font-size:13.5px;line-height:1.7;color:#9c2436;
+  }
+
+  .results{display:none;margin-top:18px;}
+  .results.show{display:block;}
+
+  .scorecard{
+    display:flex;align-items:center;gap:18px;
+    background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px 18px;
+  }
+  .gauge{
+    width:104px;height:104px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;position:relative;
+  }
+  .gauge .hole{
+    width:78px;height:78px;border-radius:50%;background:var(--panel);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .gauge .num{font-size:24px;font-weight:800;line-height:1;}
+  .gauge .pct{font-size:10px;color:var(--muted);margin-top:2px;}
+  .scoretext{flex:1;min-width:0;}
+  .verdict{font-size:17px;font-weight:800;margin:0 0 6px;line-height:1.35;}
+  .verdictsub{font-size:13px;color:var(--muted);line-height:1.6;margin:0;}
+
+  .section{margin-top:16px;}
+  .section h2{
+    font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+    margin:0 0 10px;font-weight:700;
+  }
+
+  .factor{
+    display:flex;align-items:flex-start;gap:10px;
+    background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    padding:12px 13px;margin-bottom:8px;
+  }
+  .factor .dot{
+    width:9px;height:9px;border-radius:50%;margin-top:5px;flex-shrink:0;
+  }
+  .factor .dot.pos{background:var(--bad);box-shadow:0 0 6px rgba(201,58,77,.4);}
+  .factor .dot.neg{background:var(--good);box-shadow:0 0 6px rgba(13,143,130,.4);}
+  .factor .dot.neu{background:#a8b9c2;}
+  .factor .ftext{flex:1;font-size:13.5px;line-height:1.55;}
+  .factor .ftitle{font-weight:700;margin-bottom:2px;}
+  .factor .fpoints{font-family:var(--mono);font-size:11.5px;color:var(--muted);flex-shrink:0;margin-top:3px;}
+  .tag{
+    display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:99px;
+    margin-inline-start:6px;vertical-align:middle;
+  }
+  .tag.strong{background:rgba(201,58,77,0.12);color:#a92d3f;}
+  .tag.weak{background:rgba(166,101,10,0.12);color:#8a5608;}
+  .tag.info{background:rgba(47,125,192,0.12);color:#265f8f;}
+
+  table.meta{width:100%;border-collapse:collapse;font-size:13px;}
+  table.meta td{padding:7px 4px;border-bottom:1px solid var(--border);}
+  table.meta td:first-child{color:var(--muted);width:42%;}
+  table.meta td:last-child{font-family:var(--mono);font-size:12.5px;word-break:break-all;direction:ltr;text-align:left;}
+
+  .frames{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;}
+  .frames img{height:64px;border-radius:6px;border:1px solid var(--border);flex-shrink:0;}
+  .frames.single{display:block;}
+  .frames.single img{height:auto;max-height:260px;max-width:100%;display:block;margin:0 auto;}
+
+  details{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-top:14px;}
+  details summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--text);}
+  details summary::marker{color:var(--accent);}
+  details .body{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.75;}
+  .strlist{
+    margin-top:8px;font-family:var(--mono);font-size:11px;color:#3a4f59;
+    background:var(--bg2);border-radius:8px;padding:8px 10px;max-height:160px;overflow-y:auto;
+    word-break:break-all;line-height:1.9;direction:ltr;text-align:left;
+  }
+
+  .reset{
+    display:block;width:100%;text-align:center;margin-top:18px;padding:12px;
+    background:var(--panel2);border:1px solid var(--border);border-radius:12px;
+    color:var(--muted);font-size:13.5px;cursor:pointer;
+  }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="titlerow">
+      <h1>גלאי תוכן <span>AI</span></h1>
+      <button type="button" class="infobtn" id="infoBtn" aria-expanded="false" aria-controls="infoPanel">ⓘ</button>
+    </div>
+    <div class="infopanel" id="infoPanel" hidden>
+      בודק סרטון או תמונה ומחפש סימנים לכך שנוצרו בכלי AI — לפי מטא-דאטה וניתוח חזותי. זו <b>אינדיקציה</b> בלבד ולא קביעה סופית; אין היום שיטה שמזהה תוכן-AI ב-100% ודאות, אז תמיד כדאי להסתכל על הפירוט ולשפוט בעצמכם.
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" id="tabUpload">העלאת קובץ</div>
+    <div class="tab" id="tabUrl">קישור לסרטון</div>
+  </div>
+
+  <div class="panel" id="panelUpload">
+    <div class="dropzone" id="dropzone">
+      <div class="icon">&#8593;</div>
+      <p>גררו סרטון או תמונה לכאן, או הקישו לבחירה</p>
+      <small>MP4 / MOV / WebM / JPG / PNG / WebP · מומלץ עד כ-300MB</small>
+    </div>
+    <input type="file" id="fileInput">
+    <div class="filepill" id="filepill" style="display:none;">
+      <span class="name" id="filename"></span>
+      <span class="size" id="filesize"></span>
+    </div>
+  </div>
+
+  <div class="panel" id="panelUrl" style="display:none;">
+    <div class="urlrow">
+      <input type="text" id="urlInput" placeholder="https://example.com/video.mp4 או image.jpg">
+      <button class="btn" id="urlGo">בדוק</button>
+    </div>
+    <div class="urlhint">
+      עובד רק עם קישור <b>ישיר לקובץ וידאו או תמונה</b> משרת שמאפשר גישה חוצת-מקורות (CORS).
+      קישורים ליוטיוב, טיקטוק, אינסטגרם ורוב הרשתות החברתיות <b>לא יעבדו</b> ככה — הפלטפורמות האלה חוסמות גישה ישירה לקובץ. במקרה כזה, הכי פשוט להוריד את הסרטון למכשיר ולהעלות אותו בלשונית "העלאת קובץ".
+    </div>
+  </div>
+
+  <div class="status" id="status">
+    <div class="statusline"><div class="spinner"></div><span id="statusText">מתחיל ניתוח...</span></div>
+    <div class="progtrack"><div class="progfill" id="progfill"></div></div>
+  </div>
+
+  <div class="errbox" id="errbox" style="display:none;"></div>
+
+  <div class="results" id="results">
+
+    <div class="scorecard">
+      <div class="gauge" id="gauge">
+        <div class="hole">
+          <div class="num" id="scoreNum">0</div>
+          <div class="pct">מתוך 100</div>
+        </div>
+      </div>
+      <div class="scoretext">
+        <p class="verdict" id="verdictText">—</p>
+        <p class="verdictsub" id="verdictSub">—</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>פירוט הסימנים שנבדקו</h2>
+      <div id="factors"></div>
+    </div>
+
+    <div class="section">
+      <h2>נתוני הקובץ</h2>
+      <table class="meta" id="metaTable"></table>
+    </div>
+
+    <div class="section" id="framesSection" style="display:none;">
+      <h2 id="framesTitle">פריימים שנדגמו</h2>
+      <div class="frames" id="framesRow"></div>
+    </div>
+
+    <details id="strDetails" style="display:none;">
+      <summary>מחרוזות טקסט שנמצאו בקובץ (למתעניינים)</summary>
+      <div class="body">
+        אלו מחרוזות טקסט קריאות שהתגלו בתוך הקובץ עצמו — כמו תגי קידוד, תוכנה ששימשה ליצירה או עריכה, פרמטרי יצירה, ולפעמים שם היצרן/מכשיר. משם אנחנו מזהים חתימות של כלי AI ידועים.
+        <div class="strlist" id="strlist"></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>איך הכלי הזה עובד, בעצם?</summary>
+      <div class="body">
+        1. <b>חיפוש חתימות</b> — סורקים את בייטי הקובץ (תחילתו וסופו) ומחפשים טקסט שמעיד על כלי AI ידוע ליצירת וידאו/תמונות (כולל פרמטרי יצירה כמו של Stable Diffusion — seed, sampler, cfg scale וכו'), או על תג "Content Credentials"/C2PA שחלק מהכלים מטביעים בקובץ.<br>
+        2. <b>חתימות מצלמה אמיתית</b> — אם נמצאים תגים אופייניים למצלמת סמארטפון או מצלמה אמיתית (כמו יצרן/דגם ב-EXIF), זה מוריד את הציון.<br>
+        3. <b>ניתוח חזותי</b> — בווידאו דוגמים כמה פריימים ובודקים אחידות תנועה; בתמונה בודקים את הפריים היחיד. בשני המקרים נמדד "רעש" ברמת הפיקסל, ונבדקת גם התאמה לרזולוציות טיפוסיות של כלי AI. תוכן AI נוטה לפעמים להיראות "חלק" או "נקי" מדי, אבל אלו סימנים חלשים בהרבה מהחתימות הישירות, ולכן מקבלים משקל נמוך.<br>
+        4. כל הניתוח קורה <b>בדפדפן שלכם בלבד</b> — שום קובץ לא נשלח לשום שרת.
+      </div>
+    </details>
+
+    <div class="reset" id="resetBtn">בדוק סרטון נוסף</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- DOM ----------
+  const tabUpload=document.getElementById('tabUpload');
+  const tabUrl=document.getElementById('tabUrl');
+  const panelUpload=document.getElementById('panelUpload');
+  const panelUrl=document.getElementById('panelUrl');
+  const dropzone=document.getElementById('dropzone');
+  const fileInput=document.getElementById('fileInput');
+  const filepill=document.getElementById('filepill');
+  const filenameEl=document.getElementById('filename');
+  const filesizeEl=document.getElementById('filesize');
+  const urlInput=document.getElementById('urlInput');
+  const urlGo=document.getElementById('urlGo');
+  const statusBox=document.getElementById('status');
+  const statusText=document.getElementById('statusText');
+  const progfill=document.getElementById('progfill');
+  const errbox=document.getElementById('errbox');
+  const results=document.getElementById('results');
+  const gauge=document.getElementById('gauge');
+  const scoreNum=document.getElementById('scoreNum');
+  const verdictText=document.getElementById('verdictText');
+  const verdictSub=document.getElementById('verdictSub');
+  const factorsEl=document.getElementById('factors');
+  const metaTable=document.getElementById('metaTable');
+  const framesSection=document.getElementById('framesSection');
+  const framesRow=document.getElementById('framesRow');
+  const strDetails=document.getElementById('strDetails');
+  const strlist=document.getElementById('strlist');
+  const resetBtn=document.getElementById('resetBtn');
+  const framesTitleEl=document.getElementById('framesTitle');
+  const infoBtn=document.getElementById('infoBtn');
+  const infoPanel=document.getElementById('infoPanel');
+
+  // ---------- Info toggle ----------
+  infoBtn.onclick=()=>{
+    const open=infoPanel.hidden;
+    infoPanel.hidden=!open;
+    infoBtn.setAttribute('aria-expanded', open?'true':'false');
+  };
+
+  // ---------- Tabs ----------
+  tabUpload.onclick=()=>{tabUpload.classList.add('active');tabUrl.classList.remove('active');panelUpload.style.display='block';panelUrl.style.display='none';};
+  tabUrl.onclick=()=>{tabUrl.classList.add('active');tabUpload.classList.remove('active');panelUrl.style.display='block';panelUpload.style.display='none';};
+
+  // ---------- Upload UI ----------
+  dropzone.onclick=()=>fileInput.click();
+  dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('drag');});
+  dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop',e=>{
+    e.preventDefault();dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) startAnalysis(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change',e=>{
+    if(e.target.files && e.target.files[0]) startAnalysis(e.target.files[0]);
+  });
+  urlGo.onclick=()=>{
+    const url=urlInput.value.trim();
+    if(!url){return;}
+    handleUrl(url);
+  };
+
+  resetBtn.onclick=()=>{
+    results.classList.remove('show');
+    errbox.style.display='none';
+    filepill.style.display='none';
+    fileInput.value='';
+    urlInput.value='';
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
+
+  function fmtBytes(b){
+    if(b<1024) return b+' B';
+    if(b<1024*1024) return (b/1024).toFixed(1)+' KB';
+    if(b<1024*1024*1024) return (b/1024/1024).toFixed(1)+' MB';
+    return (b/1024/1024/1024).toFixed(2)+' GB';
+  }
+
+  function setStatus(msg,pct){
+    statusBox.classList.add('show');
+    statusText.textContent=msg;
+    if(typeof pct==='number') progfill.style.width=pct+'%';
+  }
+  function hideStatus(){statusBox.classList.remove('show');progfill.style.width='0%';}
+  function showError(html){
+    errbox.style.display='block';
+    errbox.innerHTML=html;
+    hideStatus();
+  }
+
+  // ---------- URL mode ----------
+  async function handleUrl(url){
+    errbox.style.display='none';
+    results.classList.remove('show');
+    setStatus('מנסה לגשת לקישור...',10);
+    try{
+      const resp=await fetch(url,{mode:'cors'});
+      if(!resp.ok) throw new Error('http '+resp.status);
+      setStatus('מוריד את הסרטון...',30);
+      const blob=await resp.blob();
+      if(blob.size===0) throw new Error('empty');
+      const guessType=blob.type || '';
+      const file=new File([blob], (url.split('/').pop()||'file').split('?')[0], {type:guessType});
+      filepill.style.display='flex';
+      filenameEl.textContent=file.name;
+      filesizeEl.textContent=fmtBytes(file.size);
+      await startAnalysis(file);
+    }catch(err){
+      showError(
+        'לא הצלחתי להביא את הסרטון מהקישור הזה.<br><br>'+
+        'זה כמעט תמיד קורה כי (א) הקישור לא מצביע ישירות על קובץ וידאו, או (ב) השרת חוסם גישה חוצת-מקורות (CORS) — כך פועלים יוטיוב, טיקטוק, אינסטגרם ורוב הרשתות החברתיות בכוונה.<br><br>'+
+        '<b>הפתרון:</b> הורידו את הסרטון למכשיר ונסו דרך לשונית "העלאת קובץ".'
+      );
+    }
+  }
+
+  // ---------- Signatures ----------
+  const AI_SIGNATURES=[
+    ['c2pa','C2PA / Content Credentials'],
+    ['contentcredentials','Content Credentials'],
+    ['content credentials','Content Credentials'],
+    ['jumbf','JUMBF (מבנה מטא-דאטה שמלווה לרוב C2PA)'],
+    ['runwayml','Runway'],
+    ['runway ml','Runway'],
+    ['pika.art','Pika'],
+    ['pikalabs','Pika Labs'],
+    ['pika labs','Pika Labs'],
+    ['openai','OpenAI'],
+    ['sora',"Sora (OpenAI)"],
+    ['stablediffusion','Stable Diffusion'],
+    ['stable diffusion','Stable Diffusion'],
+    ['stable video diffusion','Stable Video Diffusion'],
+    ['svd_xt','Stable Video Diffusion'],
+    ['synthesia','Synthesia'],
+    ['heygen','HeyGen'],
+    ['hailuoai','Hailuo AI'],
+    ['hailuo ai','Hailuo AI'],
+    ['minimax',"MiniMax"],
+    ['kling ai','Kling AI'],
+    ['kuaishou kling','Kling AI'],
+    ['lumalabs','Luma AI'],
+    ['luma labs','Luma AI'],
+    ['dream machine','Luma Dream Machine'],
+    ['genmo',"Genmo"],
+    ['haiper',"Haiper"],
+    ['veo 2','Google Veo'],
+    ['veo 3','Google Veo'],
+    ['veo3','Google Veo'],
+    ['veo2','Google Veo'],
+    ['invideo ai','InVideo AI'],
+    ['domoai','DomoAI'],
+    ['domo ai','DomoAI'],
+    ['kaiber',"Kaiber"],
+    ['leonardo.ai','Leonardo.Ai'],
+    ['hunyuanvideo','Hunyuan Video (Tencent)'],
+    ['hunyuan video','Hunyuan Video (Tencent)'],
+    ['ltx-video','LTX-Video (Lightricks)'],
+    ['ltxvideo','LTX-Video (Lightricks)'],
+    ['vidu.studio','Vidu AI'],
+    ['vidu ai','Vidu AI'],
+    ['higgsfield','Higgsfield'],
+    ['krea.ai','Krea'],
+    ['moonvalley','Moonvalley'],
+    ['adobe firefly','Adobe Firefly'],
+    ['wan2.1','Wan (Alibaba)'],
+    ['tongyi wanxiang','Wan (Alibaba)'],
+    ['cogvideo','CogVideo'],
+    // --- image-generation signatures ---
+    ['midjourney','Midjourney'],
+    ['dall-e','DALL-E (OpenAI)'],
+    ['dalle','DALL-E (OpenAI)'],
+    ['ideogram','Ideogram'],
+    ['playground ai','Playground AI'],
+    ['playground-ai','Playground AI'],
+    ['nightcafe','NightCafe'],
+    ['bing image creator','Bing Image Creator'],
+    ['microsoft designer','Microsoft Designer'],
+    ['imagefx','Google ImageFX'],
+    ['google imagen','Google Imagen'],
+    ['imagen 3','Google Imagen'],
+    ['imagen-3','Google Imagen'],
+    ['flux.1','FLUX (Black Forest Labs)'],
+    ['blackforestlabs','FLUX (Black Forest Labs)'],
+    ['black forest labs','FLUX (Black Forest Labs)'],
+    ['recraft.ai','Recraft'],
+    ['freepik ai','Freepik AI'],
+    ['magic media','Canva Magic Media'],
+    ['craiyon','Craiyon'],
+    ['dreamstudio','DreamStudio (Stability AI)'],
+    ['grok imagine','Grok Imagine (xAI)'],
+    ['automatic1111','AUTOMATIC1111 (ממשק Stable Diffusion)'],
+    ['comfyui','ComfyUI (ממשק Stable Diffusion)'],
+    ['stable-diffusion-webui','Stable Diffusion WebUI'],
+    ['invokeai','InvokeAI'],
+    ['civitai','Civitai (מאגר מודלים ליצירת תמונות)'],
+    ['negative prompt:','פרמטרי יצירה (Stable Diffusion)'],
+    ['cfg scale:','פרמטרי יצירה (Stable Diffusion)'],
+    ['denoising strength:','פרמטרי יצירה (Stable Diffusion)'],
+    ['model hash:','פרמטרי יצירה (Stable Diffusion)'],
+    ['trainedalgorithmicmedia','C2PA: תוכן מסומן כ"נוצר ע"י אלגוריתם מאומן"'],
+    ['compositewithtrainedalgorithmicmedia','C2PA: תוכן מסומן כ"משולב עם אלגוריתם מאומן"'],
+    ['digitalsourcetype','C2PA: תג מקור דיגיטלי']
+  ];
+
+  const CAMERA_SIGNATURES=[
+    ['com.apple.quicktime','iOS / QuickTime (מכשיר אפל)'],
+    ['iphone','iPhone'],
+    ['samsung','Samsung'],
+    ['xiaomi','Xiaomi'],
+    ['huawei','Huawei'],
+    ['gopro','GoPro'],
+    ['dji ','DJI (רחפן/מצלמה)'],
+    ['canon','Canon'],
+    ['nikon','Nikon'],
+    ['sony imaging','Sony (מצלמה)'],
+    ['google pixel','Google Pixel'],
+    ['com.android.camera','מצלמת אנדרואיד']
+  ];
+
+  function extractStrings(bytes){
+    // Decode as latin1 so every byte maps to one char, then regex for printable runs
+    let s='';
+    const CHUNK=65536;
+    for(let i=0;i<bytes.length;i+=CHUNK){
+      s+=String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length)));
+    }
+    const found=s.match(/[\x20-\x7e]{5,}/g)||[];
+    // dedup, cap
+    const seen=new Set();
+    const out=[];
+    for(const str of found){
+      const t=str.trim();
+      if(t.length<5) continue;
+      if(seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+      if(out.length>=4000) break;
+    }
+    return out;
+  }
+
+  async function readChunk(file, start, end){
+    const blob=file.slice(start,end);
+    const buf=await blob.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  async function scanFileSignatures(file){
+    const HEAD=20*1024*1024, TAIL=5*1024*1024;
+    let head, tail;
+    if(file.size<=HEAD+TAIL){
+      head=await readChunk(file,0,file.size);
+      tail=new Uint8Array(0);
+    }else{
+      head=await readChunk(file,0,HEAD);
+      tail=await readChunk(file, file.size-TAIL, file.size);
+    }
+    const strings=extractStrings(head).concat(tail.length?extractStrings(tail):[]);
+    const lowerJoined='\n'+strings.join('\n').toLowerCase()+'\n';
+
+    const aiHits=[];
+    for(const [key,label] of AI_SIGNATURES){
+      if(lowerJoined.indexOf(key)!==-1) aiHits.push(label);
+    }
+    const camHits=[];
+    for(const [key,label] of CAMERA_SIGNATURES){
+      if(lowerJoined.indexOf(key)!==-1) camHits.push(label);
+    }
+    return {
+      aiHits:[...new Set(aiHits)],
+      camHits:[...new Set(camHits)],
+      strings: strings.slice(0,300)
+    };
+  }
+
+  // ---------- Video element metadata + frames ----------
+  function loadVideoMeta(file){
+    return new Promise((resolve,reject)=>{
+      const url=URL.createObjectURL(file);
+      const v=document.createElement('video');
+      v.preload='auto';
+      v.muted=true;
+      v.playsInline=true;
+      v.src=url;
+      const to=setTimeout(()=>reject(new Error('timeout')),20000);
+      v.addEventListener('loadedmetadata',()=>{
+        clearTimeout(to);
+        resolve({video:v,url});
+      },{once:true});
+      v.addEventListener('error',()=>{clearTimeout(to);reject(new Error('video load error'));},{once:true});
+    });
+  }
+
+  function seekTo(video,t){
+    return new Promise((resolve)=>{
+      function onSeeked(){video.removeEventListener('seeked',onSeeked);resolve();}
+      video.addEventListener('seeked',onSeeked);
+      try{video.currentTime=t;}catch(e){resolve();}
+    });
+  }
+
+  async function detectAudio(video){
+    try{
+      if(video.audioTracks){
+        if(video.audioTracks.length>0) return true;
+      }
+      if(typeof video.mozHasAudio!=='undefined'){
+        return !!video.mozHasAudio;
+      }
+      if(typeof video.webkitAudioDecodedByteCount!=='undefined'){
+        const prevMuted=video.muted;
+        video.muted=true;
+        await video.play().catch(()=>{});
+        await new Promise(r=>setTimeout(r,350));
+        video.pause();
+        video.muted=prevMuted;
+        return video.webkitAudioDecodedByteCount>0;
+      }
+    }catch(e){}
+    return null; // unknown
+  }
+
+  async function extractFramesAndStats(video){
+    const W=96,H=54;
+    const canvas=document.createElement('canvas');
+    canvas.width=W;canvas.height=H;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const dur=video.duration && isFinite(video.duration) ? video.duration : 0;
+    let fracs;
+    if(!dur || dur<=0){
+      fracs=[0];
+    }else{
+      // sample density scales with duration (~1 frame per 1.5s), clamped so short
+      // clips still get a decent spread and long clips don't run forever on a phone
+      const n=Math.max(6, Math.min(24, Math.round(dur/1.5)));
+      fracs=[];
+      const margin=0.04;
+      for(let i=0;i<n;i++){
+        fracs.push(margin + (1-2*margin) * (i/(n-1)));
+      }
+    }
+    const grays=[];
+    const thumbs=[];
+    for(const f of fracs){
+      const t=dur? Math.max(0, Math.min(dur-0.05, dur*f)) : 0;
+      await seekTo(video,t);
+      try{
+        ctx.drawImage(video,0,0,W,H);
+      }catch(e){ continue; }
+      const data=ctx.getImageData(0,0,W,H).data;
+      const gray=new Float32Array(W*H);
+      for(let i=0,p=0;i<data.length;i+=4,p++){
+        gray[p]=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+      }
+      grays.push(gray);
+      if(thumbs.length<8) thumbs.push(canvas.toDataURL('image/jpeg',0.6));
+    }
+
+    // edge/high-frequency energy per frame
+    let edgeSum=0;
+    for(const g of grays){
+      let e=0,count=0;
+      for(let y=0;y<H;y++){
+        for(let x=0;x<W-1;x++){
+          e+=Math.abs(g[y*W+x]-g[y*W+x+1]);
+          count++;
+        }
+      }
+      for(let x=0;x<W;x++){
+        for(let y=0;y<H-1;y++){
+          e+=Math.abs(g[y*W+x]-g[(y+1)*W+x]);
+          count++;
+        }
+      }
+      edgeSum += e/count;
+    }
+    const avgEdgeEnergy = grays.length? edgeSum/grays.length : null;
+
+    // frame-to-frame diffs
+    const diffs=[];
+    for(let i=1;i<grays.length;i++){
+      let d=0;
+      const a=grays[i-1],b=grays[i];
+      for(let p=0;p<a.length;p++) d+=Math.abs(a[p]-b[p]);
+      diffs.push(d/a.length);
+    }
+    let diffMean=null, diffCV=null;
+    if(diffs.length>=2){
+      diffMean=diffs.reduce((s,v)=>s+v,0)/diffs.length;
+      const variance=diffs.reduce((s,v)=>s+(v-diffMean)*(v-diffMean),0)/diffs.length;
+      const sd=Math.sqrt(variance);
+      diffCV = diffMean>0.15 ? sd/diffMean : null; // only meaningful if there's real motion
+    }
+
+    return {avgEdgeEnergy, diffMean, diffCV, thumbs, sampled:grays.length};
+  }
+
+  // ---------- Image handling ----------
+  const AI_IMAGE_RESOLUTIONS=new Set([
+    '512x512','768x768','1024x1024','1024x1536','1536x1024','896x1152','1152x896',
+    '1216x832','832x1216','1344x768','768x1344','1792x1024','1024x1792','640x1536',
+    '1536x640','1408x704','704x1408'
+  ]);
+
+  function loadImageMeta(file){
+    return new Promise((resolve,reject)=>{
+      const url=URL.createObjectURL(file);
+      const img=new Image();
+      const to=setTimeout(()=>reject(new Error('timeout')),20000);
+      img.onload=()=>{clearTimeout(to);resolve({img,url});};
+      img.onerror=()=>{clearTimeout(to);reject(new Error('image load error'));};
+      img.src=url;
+    });
+  }
+
+  function extractImageVisualStats(img){
+    const W=160,H=Math.round(160*(img.naturalHeight/img.naturalWidth||1));
+    const canvas=document.createElement('canvas');
+    canvas.width=W;canvas.height=Math.max(1,H);
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(img,0,0,W,canvas.height);
+    const data=ctx.getImageData(0,0,W,canvas.height).data;
+    const gray=new Float32Array(W*canvas.height);
+    for(let i=0,p=0;i<data.length;i+=4,p++){
+      gray[p]=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+    }
+    let e=0,count=0;
+    for(let y=0;y<canvas.height;y++){
+      for(let x=0;x<W-1;x++){e+=Math.abs(gray[y*W+x]-gray[y*W+x+1]);count++;}
+    }
+    for(let x=0;x<W;x++){
+      for(let y=0;y<canvas.height-1;y++){e+=Math.abs(gray[y*W+x]-gray[(y+1)*W+x]);count++;}
+    }
+    const avgEdgeEnergy = count? e/count : null;
+    const thumb=canvas.toDataURL('image/jpeg',0.75);
+    return {avgEdgeEnergy, thumb};
+  }
+
+  // ---------- Scoring ----------
+  function computeScore(kind, sig, meta, vis){
+    const isVideo = kind==='video';
+    const itemWord = isVideo ? 'סרטון' : 'תמונה';
+    const itemWordDef = isVideo ? 'הסרטון' : 'התמונה';
+    const factors=[]; // {title, detail, points, kind: pos/neg/neu, tag}
+    let score=0;
+
+    if(sig.aiHits.length>0){
+      const pts = Math.min(65, 55 + (sig.aiHits.length-1)*5);
+      score+=pts;
+      factors.push({
+        title:'נמצאה חתימת טקסט של כלי AI ידוע: '+sig.aiHits.join(', '),
+        detail:'תוך כדי סריקת בייטי הקובץ נמצא טקסט שמזוהה עם כלי ליצירת '+itemWord+' ב-AI.',
+        points:'+'+pts, kind:'pos', tag:'strong'
+      });
+    }
+
+    if(sig.camHits.length>0){
+      const pts=-35;
+      score+=pts;
+      factors.push({
+        title:'נמצאו סימנים של מצלמה/מכשיר אמיתי: '+sig.camHits.join(', '),
+        detail:'תגיות כאלה בדרך כלל מגיעות ממכשיר צילום פיזי ולא מכלי יצירה. זה סימן חזק לכיוון "'+itemWord+' אמיתי'+(isVideo?'':'ת')+'".',
+        points:pts, kind:'neg', tag:'strong'
+      });
+    }
+
+    if(isVideo){
+      if(meta.hasAudio===false && meta.duration && meta.duration<=16){
+        const pts=10;
+        score+=pts;
+        factors.push({
+          title:'אין פס קול, והסרטון קצר ('+meta.duration.toFixed(1)+' שנ\')',
+          detail:'חלק ניכר מכלי יצירת הווידאו מייצרים קליפים קצרים וללא סאונד. זה סימן חלש בפני עצמו — גם המון תוכן אמיתי (GIF-ים, קליפים שהורדו) עונה על התיאור הזה.',
+          points:'+'+pts, kind:'pos', tag:'weak'
+        });
+      } else if(meta.hasAudio===true){
+        factors.push({
+          title:'נמצא פס קול בסרטון',
+          detail:'רוב כלי הווידאו הישנים לא הפיקו סאונד, אבל כלים חדשים (למשל Veo3, Sora) כן — כך שזה כשלעצמו לא אומר הרבה.',
+          points:'0', kind:'neu', tag:'info'
+        });
+      }
+    } else {
+      if(meta.width && meta.height && AI_IMAGE_RESOLUTIONS.has(meta.width+'x'+meta.height)){
+        const pts=8;
+        score+=pts;
+        factors.push({
+          title:'הרזולוציה ('+meta.width+'×'+meta.height+') תואמת בדיוק פלט טיפוסי של מחוללי תמונות',
+          detail:'מספר כלי AI פופולריים (Stable Diffusion, DALL-E ואחרים) מפיקים כברירת מחדל בדיוק ברזולוציות כאלה. סימן חלש — גם עיצוב גרפי רגיל יכול להיות באותה רזולוציה.',
+          points:'+'+pts, kind:'pos', tag:'weak'
+        });
+      }
+    }
+
+    if(vis.avgEdgeEnergy!==null){
+      // graded, not a hard cliff: points ramp up smoothly the further below LOW the
+      // measurement falls, maxing out at ZERO. Avoids a same-vs-one-point-away jump.
+      const LOW=6.5, ZERO=2.2, MAXPTS=12;
+      if(vis.avgEdgeEnergy < LOW){
+        const frac=Math.min(1, (LOW-vis.avgEdgeEnergy)/(LOW-ZERO));
+        const pts=Math.max(1, Math.round(MAXPTS*frac));
+        score+=pts;
+        factors.push({
+          title:(isVideo?'הפריימים נראים':'התמונה נראית')+' "חלק'+(isVideo?'ים':'ה')+'" מהצפוי (רמת פירוט נמוכה)',
+          detail:'נמדדה רמת "רעש עדין"/פירוט נמוכה יחסית בין פיקסלים שכנים (ככל שהרמה נמוכה יותר, כך הניקוד גבוה יותר). זה יכול לרמז על עיבוד/דנויזינג טיפוסי לתוכן-AI — אבל גם '+itemWord+' שעבר דחיסה כבדה (למשל אחרי העלאה לרשת חברתית) ייראה כך. סימן ניסיוני, לא חד-משמעי.',
+          points:'+'+pts, kind:'pos', tag:'weak'
+        });
+      }
+    }
+
+    if(isVideo && vis.diffCV!==null){
+      const HI=0.15, ZERO=0.03, MAXPTS=8;
+      if(vis.diffCV < HI){
+        const frac=Math.min(1, (HI-vis.diffCV)/(HI-ZERO));
+        const pts=Math.max(1, Math.round(MAXPTS*frac));
+        score+=pts;
+        factors.push({
+          title:'תנועה אחידה באופן חריג בין הפריימים',
+          detail:'ההפרש בין פריימים עוקבים אחיד יחסית לאורך הסרטון (ככל שאחיד יותר, כך הניקוד גבוה יותר). זה יכול להתאים לתנועה "מיוצרת", אבל גם למצלמה על חצובה או תנועת מצלמה יציבה. סימן ניסיוני חלש.',
+          points:'+'+pts, kind:'pos', tag:'weak'
+        });
+      }
+    }
+
+    if(factors.length===0){
+      factors.push({
+        title:'לא נמצא אף סימן — לא לכיוון AI ולא לכיוון מצלמה אמיתית',
+        detail:'לא נמצאה חתימת טקסט, לא נמצאו תגי מצלמה, וניתוח התוכן לא הצביע על שום דבר חריג. זה קורה גם בהרבה תוכן לגיטימי, בעיקר כזה שעבר עיבוד/דחיסה שמחקו את המטא-דאטה המקורית.',
+        points:'0', kind:'neu', tag:'info'
+      });
+    }
+
+    score=Math.max(0, Math.min(100, Math.round(score)));
+    return {score, factors};
+  }
+
+  function verdictFor(kind, score, aiHitsCount){
+    const itemWord = kind==='video' ? 'סרטון' : 'תמונה';
+    if(aiHitsCount>0){
+      return {
+        title:'נמצאה חתימה ישירה של כלי AI — סימן חזק מאוד',
+        sub:'זה הסימן האמין ביותר שהכלי הזה יודע לזהות. שימו לב: אם ה'+itemWord+' הורד'+(kind==='video'?'':'ה')+' ונערך'+(kind==='video'?'':'ה')+' מחדש, לפעמים חתימות כאלה נמחקות — כך שהיעדרן לא מוכיח כלום.'
+      };
+    }
+    if(score>=55) return {title:'סבירות גבוהה יחסית ל-AI', sub:'הצטברו כמה סימנים חלשים-בינוניים יחד. מומלץ להתייחס כאינדיקציה בלבד, לא כקביעה.'};
+    if(score>=25) return {title:'קצת סימני שאלה, אבל לא חד-משמעי', sub:'נמצא סימן חלש בודד או שניים. יכול בקלות להיות תוכן אמיתי שעבר עיבוד/דחיסה.'};
+    return {title:'לא נמצאו סימנים משמעותיים ל-AI', sub:'ככל הנראה '+itemWord+' רגיל'+(kind==='video'?'':'ה')+', או שהמטא-דאטה נמחקה בדרך (למשל אחרי עריכה/דחיסה) ולא נותר מה לזהות.'};
+  }
+
+  function gaugeColor(score){
+    if(score>=55) return '#c93a4d';
+    if(score>=25) return '#a6650a';
+    return '#0d8f82';
+  }
+
+  // ---------- Render ----------
+  function renderMeta(rows){
+    metaTable.innerHTML='';
+    for(const [k,v] of rows){
+      const tr=document.createElement('tr');
+      const td1=document.createElement('td');td1.textContent=k;
+      const td2=document.createElement('td');td2.textContent=v;
+      tr.appendChild(td1);tr.appendChild(td2);
+      metaTable.appendChild(tr);
+    }
+  }
+
+  function renderFactors(factors){
+    factorsEl.innerHTML='';
+    for(const f of factors){
+      const div=document.createElement('div');
+      div.className='factor';
+      const dot=document.createElement('div');
+      dot.className='dot '+f.kind;
+      const ftext=document.createElement('div');
+      ftext.className='ftext';
+      const tagHtml = f.tag==='strong' ? '<span class="tag strong">חתימה ישירה</span>'
+                    : f.tag==='weak' ? '<span class="tag weak">סימן חלש</span>'
+                    : '<span class="tag info">מידע</span>';
+      ftext.innerHTML='<div class="ftitle">'+escapeHtml(f.title)+tagHtml+'</div><div>'+escapeHtml(f.detail)+'</div>';
+      const pts=document.createElement('div');
+      pts.className='fpoints';
+      pts.textContent=f.points;
+      div.appendChild(dot);div.appendChild(ftext);div.appendChild(pts);
+      factorsEl.appendChild(div);
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderScore(kind,score,factors,aiHitsCount){
+    const col=gaugeColor(score);
+    gauge.style.background='conic-gradient('+col+' '+(score*3.6)+'deg, #d7e2e8 0deg)';
+    scoreNum.textContent=score;
+    scoreNum.style.color=col;
+    const v=verdictFor(kind,score,aiHitsCount);
+    verdictText.textContent=v.title;
+    verdictSub.textContent=v.sub;
+    renderFactors(factors);
+  }
+
+  function detectKind(file){
+    if(file.type && file.type.startsWith('image/')) return 'image';
+    if(file.type && file.type.startsWith('video/')) return 'video';
+    if(/\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name||'')) return 'image';
+    return 'video';
+  }
+
+  function isHeicFile(file){
+    const t=(file.type||'').toLowerCase();
+    if(t==='image/heic' || t==='image/heif' || t==='image/heic-sequence' || t==='image/heif-sequence') return true;
+    return /\.(heic|heif)$/i.test(file.name||'');
+  }
+
+  // ---------- Main pipeline ----------
+  async function startAnalysis(file){
+    errbox.style.display='none';
+    results.classList.remove('show');
+    filepill.style.display='flex';
+    filenameEl.textContent=file.name||'file';
+    filesizeEl.textContent=fmtBytes(file.size);
+
+    const kind=detectKind(file);
+
+    if(file.type && !file.type.startsWith('video/') && !file.type.startsWith('image/') && !isHeicFile(file)){
+      showError('הקובץ שנבחר ('+escapeHtml(file.type)+') הוא לא וידאו ולא תמונה. אפשר לבחור קובץ mp4/mov/webm או jpg/png/webp.');
+      return;
+    }
+
+    if(isHeicFile(file)){
+      showError(
+        'הפורמט הזה (HEIC/HEIF, ברירת המחדל של מצלמת אייפון) לא נתמך בדפדפן כרום — רק ספארי יודע לפתוח אותו.<br><br>'+
+        '<b>שני פתרונות מהירים:</b><br>'+
+        '1. באייפון: הגדרות ← מצלמה ← פורמטים ← "תואם מירבי" — כל תמונה חדשה תישמר כ-JPEG רגיל.<br>'+
+        '2. לתמונה קיימת: בעת השיתוף/שמירה מהאלבום, יש אפשרות להמיר ל"תואם ביותר" (JPEG) לפני ההעלאה.'
+      );
+      return;
+    }
+
+    try{
+      setStatus('סורק את הקובץ לחיפוש חתימות...',15);
+      const sig=await scanFileSignatures(file);
+
+      let meta, vis, url;
+
+      if(kind==='image'){
+        setStatus('טוען את התמונה...',45);
+        const loaded=await loadImageMeta(file);
+        url=loaded.url;
+        setStatus('מנתח את התמונה...',75);
+        const imgStats=extractImageVisualStats(loaded.img);
+        meta={
+          duration:null, hasAudio:null,
+          width: loaded.img.naturalWidth||null,
+          height: loaded.img.naturalHeight||null
+        };
+        vis={avgEdgeEnergy: imgStats.avgEdgeEnergy, diffCV:null, thumbs: imgStats.thumb?[imgStats.thumb]:[], sampled: imgStats.thumb?1:0};
+      } else {
+        setStatus('טוען מטא-דאטה של הווידאו...',40);
+        const loaded=await loadVideoMeta(file);
+        url=loaded.url;
+        setStatus('בודק נוכחות פס קול...',55);
+        const hasAudio=await detectAudio(loaded.video);
+        setStatus('דוגם פריימים ומנתח אותם...',70);
+        vis=await extractFramesAndStats(loaded.video);
+        meta={
+          duration: loaded.video.duration && isFinite(loaded.video.duration) ? loaded.video.duration : null,
+          width: loaded.video.videoWidth||null,
+          height: loaded.video.videoHeight||null,
+          hasAudio
+        };
+      }
+
+      setStatus('מחשב ציון...',92);
+      const {score,factors}=computeScore(kind, sig, meta, vis);
+
+      renderScore(kind, score, factors, sig.aiHits.length);
+
+      const metaRows=[
+        ['שם קובץ', file.name||'—'],
+        ['גודל', fmtBytes(file.size)],
+        ['סוג MIME', file.type||'לא ידוע'],
+        ['רזולוציה', meta.width&&meta.height ? (meta.width+' × '+meta.height) : 'לא זוהתה']
+      ];
+      if(kind==='video'){
+        metaRows.push(['משך', meta.duration? meta.duration.toFixed(2)+' שניות' : 'לא זוהה']);
+        metaRows.push(['פס קול', meta.hasAudio===true?'קיים':meta.hasAudio===false?'לא נמצא':'לא ניתן לקבוע']);
+      }
+      metaRows.push(['חתימות AI שנמצאו', sig.aiHits.length? sig.aiHits.join(', ') : 'אין']);
+      metaRows.push(['חתימות מצלמה שנמצאו', sig.camHits.length? sig.camHits.join(', ') : 'אין']);
+      if(kind==='video') metaRows.push(['פריימים שנדגמו לניתוח', vis.sampled]);
+      renderMeta(metaRows);
+
+      if(vis.thumbs && vis.thumbs.length){
+        framesRow.innerHTML='';
+        framesRow.classList.toggle('single', kind==='image');
+        framesTitleEl.textContent = kind==='image' ? 'התמונה שנבדקה' : 'פריימים שנדגמו';
+        for(const t of vis.thumbs){
+          const img=document.createElement('img');
+          img.src=t;
+          framesRow.appendChild(img);
+        }
+        framesSection.style.display='block';
+      }else{
+        framesSection.style.display='none';
+      }
+
+      if(sig.strings.length){
+        strlist.textContent=sig.strings.slice(0,150).join('  ·  ');
+        strDetails.style.display='block';
+      }else{
+        strDetails.style.display='none';
+      }
+
+      hideStatus();
+      results.classList.add('show');
+      URL.revokeObjectURL(url);
+      setTimeout(()=>{ results.scrollIntoView({behavior:'smooth', block:'start'}); },50);
+
+    }catch(err){
+      console.error(err);
+      showError('הניתוח נכשל באמצע התהליך. ייתכן שהקובץ פגום, בפורמט לא נתמך, או גדול מדי לזיכרון של הדפדפן בנייד. אפשר לנסות קובץ אחר או קובץ קטן יותר.');
+    }
+  }
+
+})();
+</script>
+</body>
+</html>
