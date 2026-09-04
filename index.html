@@ -98,6 +98,20 @@
   .btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
   .urlhint{color:var(--muted);font-size:12.5px;margin-top:10px;line-height:1.6;}
 
+  .dlbar{
+    display:none;margin-top:14px;background:var(--panel);border:1px solid var(--border);
+    border-radius:14px;padding:14px 16px;text-align:center;
+  }
+  .dlbar.show{display:block;}
+  .dlbar .dlname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12.5px;margin-bottom:10px;}
+  .dlbtn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;padding:12px;border-radius:10px;border:none;
+    background:linear-gradient(180deg, var(--accent), #0a6f65);color:#ffffff;
+    font-size:14.5px;font-weight:700;text-decoration:none;cursor:pointer;
+  }
+  .dlbtn:active{opacity:.85;}
+
   .filepill{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:var(--bg2);border:1px solid var(--border);border-radius:12px;
@@ -248,8 +262,9 @@
       <button class="btn" id="urlGo">בדוק</button>
     </div>
     <div class="urlhint">
-      עובד רק עם קישור <b>ישיר לקובץ וידאו או תמונה</b> משרת שמאפשר גישה חוצת-מקורות (CORS).
-      קישורים ליוטיוב, טיקטוק, אינסטגרם ורוב הרשתות החברתיות <b>לא יעבדו</b> ככה — הפלטפורמות האלה חוסמות גישה ישירה לקובץ. במקרה כזה, הכי פשוט להוריד את הסרטון למכשיר ולהעלות אותו בלשונית "העלאת קובץ".
+      תומך בהדבקת קישור מ<b>יוטיוב (כולל Shorts), טיקטוק וטוויטר/X</b> — הכלי מביא את הסרטון בעצמו דרך שרת ביניים משלנו (כי הפלטפורמות האלה חוסמות גישה ישירה מהדפדפן). באינסטגרם ובפייסבוק זה עובד רק לפוסטים <b>ציבוריים</b> (לא פרטיים ולא דורשי-התחברות). קישור ישיר לקובץ וידאו/תמונה עם CORS פתוח גם יעבוד כרגיל.
+      <br><br>
+      <b>לגבי פרטיות:</b> בניגוד להעלאת קובץ (שרצה כולה בדפדפן שלכם), קישור מרשת חברתית עובר דרך שרת הביניים שלנו כדי להוריד אותו — הוא לא נשמר שם ולא נשלח הלאה לשום מקום אחר, אבל זה שונה מהמצב הרגיל של "שום קובץ לא יוצא מהדפדפן". ניתוח ה-AI עצמו עדיין רץ אצלכם בדפדפן, אחרי שהקובץ מגיע.
     </div>
   </div>
 
@@ -259,6 +274,11 @@
   </div>
 
   <div class="errbox" id="errbox" style="display:none;"></div>
+
+  <div class="dlbar" id="dlBar">
+    <div class="dlname" id="dlName"></div>
+    <a class="dlbtn" id="dlBtn" href="#" download>&#128190;&nbsp; שמירת הסרטון למכשיר</a>
+  </div>
 
   <div class="results" id="results">
 
@@ -340,6 +360,9 @@
   const statusText=document.getElementById('statusText');
   const progfill=document.getElementById('progfill');
   const errbox=document.getElementById('errbox');
+  const dlBar=document.getElementById('dlBar');
+  const dlName=document.getElementById('dlName');
+  const dlBtn=document.getElementById('dlBtn');
   const results=document.getElementById('results');
   const gauge=document.getElementById('gauge');
   const scoreNum=document.getElementById('scoreNum');
@@ -390,6 +413,8 @@
     results.classList.remove('show');
     errbox.style.display='none';
     filepill.style.display='none';
+    dlBar.classList.remove('show');
+    if(dlBtn.href && dlBtn.href.startsWith('blob:')) URL.revokeObjectURL(dlBtn.href);
     fileInput.value='';
     urlInput.value='';
     window.scrollTo({top:0,behavior:'smooth'});
@@ -440,27 +465,48 @@
   }
 
   // ---------- URL mode ----------
+  function offerDownload(file){
+    if(dlBtn.href && dlBtn.href.startsWith('blob:')) URL.revokeObjectURL(dlBtn.href);
+    const objUrl=URL.createObjectURL(file);
+    dlBtn.href=objUrl;
+    dlBtn.download=file.name;
+    dlName.textContent=file.name+' · '+fmtBytes(file.size);
+    dlBar.classList.add('show');
+  }
+
   async function handleUrl(url){
     errbox.style.display='none';
     results.classList.remove('show');
-    setStatus('מנסה לגשת לקישור...',10);
+    dlBar.classList.remove('show');
+    setStatus('פותח את הקישור ברשת החברתית...',10);
     try{
-      const resp=await fetch(url,{mode:'cors'});
-      if(!resp.ok) throw new Error('http '+resp.status);
-      setStatus('מוריד את הסרטון...',30);
+      const proxied='/.netlify/functions/fetch-video?url='+encodeURIComponent(url);
+      setStatus('מוריד את הסרטון (יכול לקחת כמה שניות)...',30);
+      const resp=await fetch(proxied);
+      if(!resp.ok){
+        let msg='';
+        try{ const j=await resp.json(); if(j&&j.error) msg=j.error; }catch(_e){}
+        throw new Error(msg||('http '+resp.status));
+      }
+      setStatus('שומר את הקובץ...',65);
       const blob=await resp.blob();
-      if(blob.size===0) throw new Error('empty');
-      const guessType=blob.type || '';
-      const file=new File([blob], (url.split('/').pop()||'file').split('?')[0], {type:guessType});
+      if(blob.size===0) throw new Error('הקובץ שהתקבל ריק');
+      const cd=resp.headers.get('content-disposition')||'';
+      const nameMatch=cd.match(/filename="([^"]+)"/);
+      const guessedName=nameMatch ? nameMatch[1] : (url.split('/').pop()||'video').split('?')[0];
+      const guessType=blob.type||'video/mp4';
+      const file=new File([blob], guessedName, {type:guessType});
       filepill.style.display='flex';
       filenameEl.textContent=file.name;
       filesizeEl.textContent=fmtBytes(file.size);
+      offerDownload(file);
       await startAnalysis(file);
     }catch(err){
       showError(
         'לא הצלחתי להביא את הסרטון מהקישור הזה.<br><br>'+
-        'זה כמעט תמיד קורה כי (א) הקישור לא מצביע ישירות על קובץ וידאו, או (ב) השרת חוסם גישה חוצת-מקורות (CORS) — כך פועלים יוטיוב, טיקטוק, אינסטגרם ורוב הרשתות החברתיות בכוונה.<br><br>'+
-        '<b>הפתרון:</b> הורידו את הסרטון למכשיר ונסו דרך לשונית "העלאת קובץ".'
+        (err&&err.message ? ('<b>סיבה:</b> '+escapeHtml(err.message)+'<br><br>') : '')+
+        'נתמכים כרגע: יוטיוב (כולל Shorts), טיקטוק, טוויטר/X, ובאופן חלקי אינסטגרם ופייסבוק (רק לפוסטים ציבוריים).<br><br>'+
+        '<b>חלופה:</b> הורידו את הסרטון למכשיר (למשל דרך שיתוף מתוך האפליקציה) ונסו דרך לשונית "העלאת קובץ".'
       );
     }
   }
