@@ -301,10 +301,11 @@
     <details>
       <summary>איך הכלי הזה עובד, בעצם?</summary>
       <div class="body">
-        1. <b>חיפוש חתימות</b> — סורקים את בייטי הקובץ (תחילתו וסופו) ומחפשים טקסט שמעיד על כלי AI ידוע ליצירת וידאו/תמונות (כולל פרמטרי יצירה כמו של Stable Diffusion — seed, sampler, cfg scale וכו'), או על תג "Content Credentials"/C2PA שחלק מהכלים מטביעים בקובץ.<br>
+        1. <b>חיפוש חתימות</b> — סורקים את בייטי הקובץ (תחילתו וסופו), פעמיים: כטקסט רגיל וגם כ-UTF-16 (כדי לא לפספס מטא-דאטה שנשמרה בקידוד הזה, כמו שקורה בכלים מסוימים בווינדוס), ומחפשים טקסט שמעיד על כלי AI ידוע ליצירת וידאו/תמונות — כולל כלים חדשים כמו Sora 2‏, Kling 2‏, Runway Gen-4‏, Seedance ועוד, פרמטרי יצירה כמו של Stable Diffusion (seed, sampler, cfg scale וכו'), או תג "Content Credentials"/C2PA שחלק מהכלים מטביעים בקובץ.<br>
         2. <b>חתימות מצלמה אמיתית</b> — אם נמצאים תגים אופייניים למצלמת סמארטפון או מצלמה אמיתית (כמו יצרן/דגם ב-EXIF), זה מוריד את הציון.<br>
-        3. <b>ניתוח חזותי</b> — בווידאו דוגמים כמה פריימים ובודקים אחידות תנועה; בתמונה בודקים את הפריים היחיד. בשני המקרים נמדד "רעש" ברמת הפיקסל, ונבדקת גם התאמה לרזולוציות טיפוסיות של כלי AI. תוכן AI נוטה לפעמים להיראות "חלק" או "נקי" מדי, אבל אלו סימנים חלשים בהרבה מהחתימות הישירות, ולכן מקבלים משקל נמוך.<br>
-        4. כל הניתוח קורה <b>בדפדפן שלכם בלבד</b> — שום קובץ לא נשלח לשום שרת.
+        3. <b>ניתוח חזותי</b> — בווידאו דוגמים כמה פריימים ובודקים אחידות תנועה; בתמונה בודקים את הפריים היחיד. בשני המקרים נמדד "רעש" ברמת הפיקסל, נבדקת רשת-פיקסלים בתדירות קבועה (סימן טיפוסי לשכבות "הגדלה" של מודלים גנרטיביים), ונבדקת גם התאמה לרזולוציות טיפוסיות של כלי AI (בתמונות). תוכן AI נוטה לפעמים להיראות "חלק" או "נקי" מדי, אבל אלו סימנים חלשים בהרבה מהחתימות הישירות, ולכן מקבלים משקל נמוך.<br>
+        4. <b>למה לפעמים זה מפספס:</b> כלי ה-AI המובילים כיום מייצרים תוכן ברמה שקשה-עד-בלתי-אפשרית להבחין ממנו חזותית, ובלי חתימת טקסט (למשל אחרי הורדה מרשת חברתית שמוחקת מטא-דאטה) פשוט אין לכלי דפדפן כזה מספיק מידע כדי לקבוע בביטחון — הוא לא מודל AI, רק אוסף בדיקות היוריסטיות. ציון נמוך אומר "לא נמצא סימן", לא "אומת כאמיתי".<br>
+        5. כל הניתוח קורה <b>בדפדפן שלכם בלבד</b> — שום קובץ לא נשלח לשום שרת.
       </div>
     </details>
 
@@ -549,7 +550,51 @@
     ['model hash:','פרמטרי יצירה (Stable Diffusion)'],
     ['trainedalgorithmicmedia','C2PA: תוכן מסומן כ"נוצר ע"י אלגוריתם מאומן"'],
     ['compositewithtrainedalgorithmicmedia','C2PA: תוכן מסומן כ"משולב עם אלגוריתם מאומן"'],
-    ['digitalsourcetype','C2PA: תג מקור דיגיטלי']
+    ['digitalsourcetype','C2PA: תג מקור דיגיטלי'],
+    // --- newer video-generation tools ---
+    ['sora-2','Sora 2 (OpenAI)'],
+    ['sora2','Sora 2 (OpenAI)'],
+    ['runway gen-3','Runway Gen-3'],
+    ['runway gen-4','Runway Gen-4'],
+    ['gen-3 alpha','Runway Gen-3'],
+    ['gen-4','Runway Gen-4'],
+    ['kling 2','Kling 2 (Kuaishou)'],
+    ['klingai','Kling AI'],
+    ['hailuo 02','Hailuo 02 (MiniMax)'],
+    ['hailuo02','Hailuo 02 (MiniMax)'],
+    ['seedance','Seedance (ByteDance)'],
+    ['seedream','Seedream (ByteDance)'],
+    ['pixverse','PixVerse'],
+    ['vidu q1','Vidu Q1'],
+    ['viduq1','Vidu Q1'],
+    ['mochi-1','Mochi 1 (Genmo)'],
+    ['genmo mochi','Mochi (Genmo)'],
+    ['hedra','Hedra'],
+    ['movie gen','Meta Movie Gen'],
+    ['metamoviegen','Meta Movie Gen'],
+    ['ray2','Luma Ray2'],
+    ['ray 2','Luma Ray2'],
+    ['ray3','Luma Ray3'],
+    ['wan2.2','Wan (Alibaba)'],
+    ['wan 2.2','Wan (Alibaba)'],
+    ['framepack','FramePack'],
+    ['ltx-2','LTX-2 (Lightricks)'],
+    ['ltx2','LTX-2 (Lightricks)'],
+    ['viggle','Viggle'],
+    ['capcut ai','CapCut AI'],
+    ['dreamina','Dreamina (CapCut/ByteDance)'],
+    ['omnihuman','OmniHuman'],
+    ['grok imagine video','Grok Imagine Video (xAI)'],
+    // --- newer image-generation tools ---
+    ['nano banana','Nano Banana / Gemini Image (Google)'],
+    ['gemini image','Gemini Image (Google)'],
+    ['gpt-image-1','GPT Image (OpenAI)'],
+    ['gptimage1','GPT Image (OpenAI)'],
+    ['ideogram 3','Ideogram 3'],
+    ['qwen-image','Qwen-Image (Alibaba)'],
+    ['qwen image','Qwen-Image (Alibaba)'],
+    ['hidream','HiDream'],
+    ['photoroom ai','Photoroom AI']
   ];
 
   const CAMERA_SIGNATURES=[
@@ -568,14 +613,39 @@
   ];
 
   function extractStrings(bytes){
-    // Decode as latin1 so every byte maps to one char, then regex for printable runs
+    // Decode as latin1 so every byte maps to one char, then regex for printable runs.
+    // Catches plain-ASCII/UTF-8 metadata (most embedded tool tags, C2PA/JUMBF identifiers).
     let s='';
     const CHUNK=65536;
     for(let i=0;i<bytes.length;i+=CHUNK){
       s+=String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+CHUNK, bytes.length)));
     }
     const found=s.match(/[\x20-\x7e]{5,}/g)||[];
-    // dedup, cap
+    return dedupCap(found);
+  }
+
+  function extractStringsUTF16(bytes){
+    // Many MP4/MOV atoms (esp. from Windows-authored encoders and some export
+    // pipelines) store text as UTF-16LE: null bytes between ASCII chars break the
+    // latin1 printable-run regex into single characters, so a plain-string scan
+    // silently misses this metadata entirely. Decode as UTF-16LE too and re-scan —
+    // at BOTH byte alignments, since we don't know whether the UTF-16 text inside
+    // this chunk starts at an even or odd offset; decoding from the wrong parity
+    // pairs each character with the wrong neighbour and garbles it completely.
+    let out=[];
+    for(const startOffset of [0,1]){
+      try{
+        const usable=bytes.length-startOffset;
+        const len=usable-(usable%2);
+        if(len<=0) continue;
+        const s=new TextDecoder('utf-16le',{fatal:false}).decode(bytes.subarray(startOffset,startOffset+len));
+        out=out.concat(s.match(/[\x20-\x7e]{5,}/g)||[]);
+      }catch(e){ /* skip this alignment */ }
+    }
+    return dedupCap(out);
+  }
+
+  function dedupCap(found){
     const seen=new Set();
     const out=[];
     for(const str of found){
@@ -606,7 +676,9 @@
       tail=await readChunk(file, file.size-TAIL, file.size);
     }
     const strings=extractStrings(head).concat(tail.length?extractStrings(tail):[]);
-    const lowerJoined='\n'+strings.join('\n').toLowerCase()+'\n';
+    const strings16=extractStringsUTF16(head).concat(tail.length?extractStringsUTF16(tail):[]);
+    const allStrings=dedupCap(strings.concat(strings16));
+    const lowerJoined='\n'+allStrings.join('\n').toLowerCase()+'\n';
 
     const aiHits=[];
     for(const [key,label] of AI_SIGNATURES){
@@ -619,8 +691,68 @@
     return {
       aiHits:[...new Set(aiHits)],
       camHits:[...new Set(camHits)],
-      strings: strings.slice(0,300)
+      strings: allStrings.slice(0,300)
     };
+  }
+
+  // ---------- Periodicity / upsampling-checkerboard heuristic ----------
+  // GAN and diffusion decoders very often upsample through transposed-convolution
+  // or pixel-shuffle layers, which leave a faint, regular grid in the output
+  // (classic "checkerboard artifacts" from the deconvolution literature). A real
+  // camera/photo sensor has no such fixed-period structure. This measures whether
+  // pixel differences dip sharply at a small, exact period compared to their
+  // immediate neighbours — a real (if still circumstantial) signature of that grid,
+  // distinct from plain edge/noise-level smoothness.
+  function offsetDiff(gray, W, H, ox, oy){
+    let sum=0, count=0;
+    for(let y=0; y<H-oy; y++){
+      const rowBase=y*W, rowBase2=(y+oy)*W;
+      for(let x=0; x<W-ox; x++){
+        sum += Math.abs(gray[rowBase+x] - gray[rowBase2+x+ox]);
+        count++;
+      }
+    }
+    return count ? sum/count : 0;
+  }
+
+  function periodAnomaly(gray, W, H, period){
+    // dip at `period` relative to its immediate +-1 neighbours, in both axes
+    const dCh=offsetDiff(gray,W,H,period,0), dCv=offsetDiff(gray,W,H,0,period);
+    const dLh=offsetDiff(gray,W,H,period-1,0), dRh=offsetDiff(gray,W,H,period+1,0);
+    const dLv=offsetDiff(gray,W,H,0,period-1), dRv=offsetDiff(gray,W,H,0,period+1);
+    const neighborAvgH=(dLh+dRh)/2, neighborAvgV=(dLv+dRv)/2;
+    const hAnom = neighborAvgH>0.5 ? Math.max(0, 1-(dCh/neighborAvgH)) : 0;
+    const vAnom = neighborAvgV>0.5 ? Math.max(0, 1-(dCv/neighborAvgV)) : 0;
+    return Math.max(hAnom, vAnom);
+  }
+
+  function checkerboardScore(gray, W, H){
+    // stride-2 transposed-conv/pixel-shuffle stacks are the most common source of this
+    // artifact, but stacks of them (or a single stride-4 layer) show up at period 4 too —
+    // check both scales and take the strongest anomaly found.
+    if(W<10 || H<10) return 0;
+    return Math.max(periodAnomaly(gray,W,H,2), periodAnomaly(gray,W,H,4)); // 0..1
+  }
+
+  // Upsampling-grid artifacts live at a fixed pixel period in the media's ACTUAL
+  // resolution. The edge/motion analysis elsewhere in this file deliberately works on
+  // a small downsampled thumbnail (cheap, and fine for that purpose) — but resizing
+  // with interpolation is a low-pass filter that erases exactly this kind of
+  // fine, period-2/4 pattern before checkerboardScore ever sees it. So this grabs a
+  // native-resolution, unsmoothed center crop instead, sized only for this one check.
+  function nativeGrayCrop(sourceEl, srcW, srcH, targetSize){
+    if(!srcW || !srcH) return null;
+    const size=Math.max(10, Math.min(targetSize, srcW, srcH));
+    const sx=Math.floor((srcW-size)/2), sy=Math.floor((srcH-size)/2);
+    const canvas=document.createElement('canvas');
+    canvas.width=size; canvas.height=size;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(sourceEl, sx, sy, size, size, 0, 0, size, size); // 1:1 pixel crop, no scaling
+    const data=ctx.getImageData(0,0,size,size).data;
+    const gray=new Float32Array(size*size);
+    for(let i=0,p=0;i<data.length;i+=4,p++) gray[p]=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+    return {gray, size};
   }
 
   // ---------- Video element metadata + frames ----------
@@ -689,8 +821,10 @@
         fracs.push(margin + (1-2*margin) * (i/(n-1)));
       }
     }
+    const vw=video.videoWidth||0, vh=video.videoHeight||0;
     const grays=[];
     const thumbs=[];
+    const cbScores=[];
     for(const f of fracs){
       const t=dur? Math.max(0, Math.min(dur-0.05, dur*f)) : 0;
       await seekTo(video,t);
@@ -704,6 +838,14 @@
       }
       grays.push(gray);
       if(thumbs.length<8) thumbs.push(canvas.toDataURL('image/jpeg',0.6));
+
+      // checkerboard heuristic needs a NATIVE-resolution crop, not this downsampled
+      // thumbnail (see nativeGrayCrop) — sample it straight from the video element
+      // at the same timestamp, before the next seek moves it.
+      try{
+        const crop=nativeGrayCrop(video, vw, vh, 256);
+        if(crop) cbScores.push(checkerboardScore(crop.gray, crop.size, crop.size));
+      }catch(e){ /* ignore, keep going */ }
     }
 
     // edge/high-frequency energy per frame
@@ -726,6 +868,11 @@
     }
     const avgEdgeEnergy = grays.length? edgeSum/grays.length : null;
 
+    // fixed-period grid ("checkerboard") artifact, averaged across sampled frames
+    const checkerboard = cbScores.length
+      ? cbScores.reduce((s,v)=>s+v,0)/cbScores.length
+      : null;
+
     // frame-to-frame diffs
     const diffs=[];
     for(let i=1;i<grays.length;i++){
@@ -742,7 +889,7 @@
       diffCV = diffMean>0.15 ? sd/diffMean : null; // only meaningful if there's real motion
     }
 
-    return {avgEdgeEnergy, diffMean, diffCV, thumbs, sampled:grays.length};
+    return {avgEdgeEnergy, diffMean, diffCV, checkerboard, thumbs, sampled:grays.length};
   }
 
   // ---------- Image handling ----------
@@ -782,8 +929,18 @@
       for(let y=0;y<canvas.height-1;y++){e+=Math.abs(gray[y*W+x]-gray[(y+1)*W+x]);count++;}
     }
     const avgEdgeEnergy = count? e/count : null;
+
+    // checkerboard heuristic needs native resolution (see nativeGrayCrop) — the W×H
+    // canvas above is downsampled for cheap edge-energy scanning and would smooth
+    // a fine upsampling grid away before it could be measured.
+    let checkerboard=null;
+    try{
+      const crop=nativeGrayCrop(img, img.naturalWidth, img.naturalHeight, 256);
+      if(crop) checkerboard=checkerboardScore(crop.gray, crop.size, crop.size);
+    }catch(e){ /* leave as null if this fails */ }
+
     const thumb=canvas.toDataURL('image/jpeg',0.75);
-    return {avgEdgeEnergy, thumb};
+    return {avgEdgeEnergy, checkerboard, thumb};
   }
 
   // ---------- Scoring ----------
@@ -872,10 +1029,24 @@
       }
     }
 
+    if(vis.checkerboard!==null && vis.checkerboard!==undefined){
+      const LOW=0.22, HIGH=0.55, MAXPTS=10;
+      if(vis.checkerboard > LOW){
+        const frac=Math.min(1, (vis.checkerboard-LOW)/(HIGH-LOW));
+        const pts=Math.max(1, Math.round(MAXPTS*frac));
+        score+=pts;
+        factors.push({
+          title:'נמצאה רשת פיקסלים בתדירות קבועה (סימן טיפוסי ל"דגימת-יתר" של מחוללי AI)',
+          detail:'מודלים גנרטיביים (GAN/דיפוזיה) לעיתים קרובות "מגדילים" את הפלט שלהם בשכבות שמשאירות רשת עדינה וקבועה בין פיקסלים — תופעה מוכרת בספרות בשם "checkerboard artifacts". נמדדה ירידה חדה בהפרש בין פיקסלים במרווח קבוע, יחסית לשכניו — סימן שלא אמור להופיע בתמונה שצולמה בפועל. עדיין סימן ניסיוני, ועלול להיווצר גם מכיווץ/שינוי גודל אגרסיבי.',
+          points:'+'+pts, kind:'pos', tag:'weak'
+        });
+      }
+    }
+
     if(factors.length===0){
       factors.push({
         title:'לא נמצא אף סימן — לא לכיוון AI ולא לכיוון מצלמה אמיתית',
-        detail:'לא נמצאה חתימת טקסט, לא נמצאו תגי מצלמה, וניתוח התוכן לא הצביע על שום דבר חריג. זה קורה גם בהרבה תוכן לגיטימי, בעיקר כזה שעבר עיבוד/דחיסה שמחקו את המטא-דאטה המקורית.',
+        detail:'לא נמצאה חתימת טקסט (גם לא ב-UTF-16), לא נמצאו תגי מצלמה, וניתוח התוכן לא הצביע על שום דבר חריג. חשוב להבין מה זה כן אומר ומה זה לא אומר: זה קורה גם בהרבה תוכן לגיטימי (בעיקר אחרי עיבוד/דחיסה/העלאה לרשת חברתית שמוחקת מטא-דאטה) — אבל זה גם בדיוק איך נראה סרטון/תמונה שנוצרו ב-AI איכותי מודרני שהמטא-דאטה שלו נמחקה. ציון נמוך כאן הוא "לא נמצאה הוכחה", לא "הוכח שזה אמיתי" — לכלי דפדפן כמו זה אין דרך לזהות בוודאות תוכן AI איכותי שאין לו סימן מזהה שנשאר בקובץ.',
         points:'0', kind:'neu', tag:'info'
       });
     }
@@ -893,8 +1064,8 @@
       };
     }
     if(score>=55) return {title:'סבירות גבוהה יחסית ל-AI', sub:'הצטברו כמה סימנים חלשים-בינוניים יחד. מומלץ להתייחס כאינדיקציה בלבד, לא כקביעה.'};
-    if(score>=25) return {title:'קצת סימני שאלה, אבל לא חד-משמעי', sub:'נמצא סימן חלש בודד או שניים. יכול בקלות להיות תוכן אמיתי שעבר עיבוד/דחיסה.'};
-    return {title:'לא נמצאו סימנים משמעותיים ל-AI', sub:'ככל הנראה '+itemWord+' רגיל'+(kind==='video'?'':'ה')+', או שהמטא-דאטה נמחקה בדרך (למשל אחרי עריכה/דחיסה) ולא נותר מה לזהות.'};
+    if(score>=25) return {title:'קצת סימני שאלה, אבל לא חד-משמעי', sub:'נמצא סימן חלש בודד או שניים. יכול בקלות להיות תוכן אמיתי שעבר עיבוד/דחיסה — או תוכן AI איכותי שלא הותיר הרבה סימנים.'};
+    return {title:'לא נמצאה הוכחה — וזה לא אותו דבר כמו "אומת שזה אמיתי"', sub:'לא נמצאה חתימה ולא נמצאו סימנים חזותיים חריגים. זה קורה גם בהרבה תוכן אמיתי, אבל זה גם בדיוק איך נראה תוכן AI מודרני ואיכותי שהמטא-דאטה שלו נמחקה (למשל אחרי הורדה מרשת חברתית) — לניתוח חזותי מדפדפן אין דרך אמינה להבדיל בין השניים. אל תתייחסו לציון נמוך כאישור שה'+itemWord+' אמיתי'+(kind==='video'?'':'ת')+'.'};
   }
 
   function gaugeColor(score){
@@ -1006,7 +1177,7 @@
           width: loaded.img.naturalWidth||null,
           height: loaded.img.naturalHeight||null
         };
-        vis={avgEdgeEnergy: imgStats.avgEdgeEnergy, diffCV:null, thumbs: imgStats.thumb?[imgStats.thumb]:[], sampled: imgStats.thumb?1:0};
+        vis={avgEdgeEnergy: imgStats.avgEdgeEnergy, checkerboard: imgStats.checkerboard, diffCV:null, thumbs: imgStats.thumb?[imgStats.thumb]:[], sampled: imgStats.thumb?1:0};
       } else {
         setStatus('טוען מטא-דאטה של הווידאו...',40);
         const loaded=await loadVideoMeta(file);
