@@ -5,20 +5,11 @@
       <stop offset="100%" stop-color="#2f7dc0"/>
     </linearGradient>
   </defs>
-
   <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bg)"/>
-
-  <!-- small accent sparkle, top-right -->
   <polygon fill="#ffffff" fill-opacity="0.85"
     points="382,112 385.5,124.5 398,128 385.5,131.5 382,144 378.5,131.5 366,128 378.5,124.5" />
-
-  <!-- magnifying glass handle -->
   <line x1="277.8" y1="277.8" x2="352" y2="352" stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
-
-  <!-- magnifying glass lens -->
   <circle cx="200" cy="200" r="110" fill="#ffffff" fill-opacity="0.14" stroke="#ffffff" stroke-width="30"/>
-
-  <!-- AI sparkle inside the lens -->
   <polygon fill="#ffffff"
     points="200,150 210.6,189.4 250,200 210.6,210.6 200,250 189.4,210.6 150,200 189.4,189.4" />
 </svg>
