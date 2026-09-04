@@ -472,9 +472,13 @@
       } else if(data.summary && data.summary.parsed){
         const s=data.summary;
         const pct=Math.round(s.aiScore*100);
-        hiveResult.innerHTML=
-          '<div class="hivescore">Hive: '+pct+'% סבירות ל-AI-generated ('+escapeHtml(s.aiClass)+')</div>'+
-          '<div class="hivesub">זהו ניקוד ממודל אמיתי, בנפרד מהניקוד ההיוריסטי למעלה.</div>';
+        let html='<div class="hivescore">Hive: '+pct+'% סבירות שהתוכן נוצר ב-AI</div>'+
+          '<div class="hivesub">זהו ניקוד ממודל אמיתי שאומן לזיהוי AI, בנפרד ומדויק יותר מהניקוד ההיוריסטי למעלה.</div>';
+        if(s.otherClasses && s.otherClasses.length){
+          const top=s.otherClasses.slice().sort((a,b)=>b.score-a.score)[0];
+          if(top) html+='<div class="hivesub" style="margin-top:6px;">רמז נוסף מהמודל: התאמה גבוהה יחסית לכלי "'+escapeHtml(top.class)+'" (לא ציון ודאות ישיר, רק אינדיקציה).</div>';
+        }
+        hiveResult.innerHTML=html;
       } else {
         hiveResult.innerHTML=
           '<div class="hivesub">Hive החזיר תשובה בפורמט לא צפוי. תוצאה גולמית:</div>'+

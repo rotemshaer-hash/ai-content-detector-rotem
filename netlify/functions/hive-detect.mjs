@@ -23,6 +23,13 @@ import { getStore } from "@netlify/blobs";
 const HIVE_ENDPOINT = "https://api.thehive.ai/api/v3/hive/ai-generated-and-deepfake-content-detection";
 const MAX_BYTES = 15 * 1024 * 1024; // keep well under Netlify's function payload ceiling
 
+// Confirmed live against Hive's real response (2026-09-04): each item in
+// output[].classes is {"class": "<name>", "value": <number>} — NOT "score"/
+// "confidence" as commonly named elsewhere. The two that matter are the exact
+// class names "ai_generated" and "not_ai_generated", which are a real
+// probability pair (they sum to ~1). The same classes array also carries
+// per-generator guesses (e.g. "sora") whose "value" is NOT a 0..1
+// probability — those are informational only, never used for the main score.
 function findClassificationScores(node, out) {
   if (!node || typeof node !== "object") return;
   if (Array.isArray(node)) {
@@ -30,7 +37,7 @@ function findClassificationScores(node, out) {
     return;
   }
   const cls = node.class ?? node.label ?? node.name;
-  const score = node.score ?? node.confidence ?? node.probability;
+  const score = node.value ?? node.score ?? node.confidence ?? node.probability;
   if (typeof cls === "string" && typeof score === "number") {
     out.push({ class: cls, score });
   }
@@ -40,17 +47,33 @@ function findClassificationScores(node, out) {
 function summarize(hiveJson) {
   const found = [];
   findClassificationScores(hiveJson, found);
-  const aiLike = found.filter((f) => /ai.?generat|synthetic|deepfake|fake/i.test(f.class));
-  const realLike = found.filter((f) => /^(not.?ai.?generat|real|authentic)/i.test(f.class));
-  if (aiLike.length === 0) return { parsed: false, allScores: found };
-  const best = aiLike.reduce((a, b) => (b.score > a.score ? b : a));
-  const bestReal = realLike.length ? realLike.reduce((a, b) => (b.score > a.score ? b : a)) : null;
+
+  // exact match first (the real, confirmed schema)
+  let aiHit = found.find((f) => f.class === "ai_generated");
+  let realHit = found.find((f) => f.class === "not_ai_generated");
+
+  // fuzzy fallback only if Hive ever changes the exact names
+  if (!aiHit) {
+    const aiLike = found.filter((f) => /ai.?generat|synthetic|deepfake/i.test(f.class) && !/^not.?ai.?generat/i.test(f.class));
+    if (aiLike.length) aiHit = aiLike.reduce((a, b) => (b.score > a.score ? b : a));
+  }
+  if (!realHit) {
+    const realLike = found.filter((f) => /^(not.?ai.?generat|real|authentic)/i.test(f.class));
+    if (realLike.length) realHit = realLike.reduce((a, b) => (b.score > a.score ? b : a));
+  }
+
+  if (!aiHit) return { parsed: false, allScores: found };
+
+  // other per-generator-model classes Hive returned (e.g. "sora"), for context only
+  const otherClasses = found.filter((f) => f.class !== "ai_generated" && f.class !== "not_ai_generated");
+
   return {
     parsed: true,
-    aiClass: best.class,
-    aiScore: best.score,
-    realClass: bestReal && bestReal.class,
-    realScore: bestReal && bestReal.score,
+    aiClass: aiHit.class,
+    aiScore: aiHit.score,
+    realClass: realHit && realHit.class,
+    realScore: realHit && realHit.score,
+    otherClasses,
     allScores: found,
   };
 }
