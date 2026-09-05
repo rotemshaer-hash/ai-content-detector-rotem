@@ -6,16 +6,6 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-[functions."fetch-video"]
-  # @distube/ytdl-core (and its own deps like m3u8stream/miniget) use dynamic
-  # requires internally that esbuild can trip over — marking the module
-  # external didn't fix the 404, because esbuild was still the one deciding
-  # what does/doesn't get bundled and could still mishandle the rest of the
-  # dependency tree. Switching this one function to the "nft" bundler skips
-  # esbuild entirely: nft just traces real require() calls on disk and copies
-  # the files, which handles dynamic requires correctly.
-  node_bundler = "nft"
-
 [[headers]]
   for = "/.netlify/functions/*"
   [headers.values]

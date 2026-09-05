@@ -1,13 +1,12 @@
 {
   "name": "ai-content-detector-rotem",
   "private": true,
-  "version": "1.2.2",
+  "version": "1.3.0",
   "description": "Client-side AI content detector, plus Netlify Functions that fetch videos from social links and optionally run a cloud AI-detection check (Hive), server-side.",
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
     "@netlify/blobs": "^11.0.3"
   }
 }

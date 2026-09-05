@@ -7,12 +7,31 @@
 // fetch has to happen from a server. This function is that server.
 //
 // Called by index.html as: /.netlify/functions/fetch-video?url=<encoded link>
-// (bundled with node_bundler = "nft", see netlify.toml — esbuild + external_node_modules
-// wasn't enough to fix the 404, this function needs a full content change to force Netlify
-// to rebuild it rather than reuse a stale cached bundle from before that fix)
+//
+// YouTube note (why there is no ytdl-core here any more):
+// ytdl-core's getInfo() always loads the plain youtube.com/watch HTML page
+// first, and that page is exactly what YouTube bot-blocks from datacenter IPs
+// like Netlify's — it answers LOGIN_REQUIRED / "Sign in to confirm you're not
+// a bot" before any of the mobile clients are even tried. So we skip that page
+// and call YouTube's innertube player API directly. Dropping the dependency
+// also removes the bundler fragility that made this whole function 404.
+//
+// Which innertube client, and why ANDROID_VR — measured 2026-09-05 from a
+// datacenter IP against real videos, since this is exactly the situation
+// Netlify is in:
+//   IOS, ANDROID .................. HTTP 400 FAILED_PRECONDITION (dead)
+//   TVHTML5_SIMPLY_EMBEDDED ....... "YouTube is no longer supported in this app"
+//   WEB_EMBEDDED_PLAYER ........... "This video is unavailable"
+//   WEB, MWEB, TVHTML5, *_MUSIC,
+//   WEB_CREATOR, ANDROID_CREATOR .. LOGIN_REQUIRED / "Please sign in"
+//   ANDROID_VR .................... the only one that ever returns OK with a
+//                                   direct, unciphered progressive URL
+// ANDROID_VR is not a silver bullet — it succeeded on 1 of 5 test videos, the
+// rest still answered LOGIN_REQUIRED, and that result was stable across
+// repeats (per-video, not random). Anonymous server-side YouTube downloading
+// is largely closed; this gets the videos that are still gettable and gives an
+// honest, actionable error for the rest.
 
-import ytdl from "@distube/ytdl-core";
-import { Readable } from "node:stream";
 import dns from "node:dns/promises";
 import net from "node:net";
 
@@ -84,6 +103,25 @@ async function assertPublicHttpUrl(rawUrl) {
   return u;
 }
 
+// Follows redirects by hand, re-running the SSRF check on every hop. Plain
+// redirect:"follow" would let hop 2 land on a private address that hop 1's
+// check never saw; redirect:"error" is safe but too strict — googlevideo and
+// most CDNs legitimately redirect once or twice before serving the bytes.
+async function safeFetchFollowing(startUrl, headers, maxHops = 4) {
+  let current = startUrl;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const safeUrl = await assertPublicHttpUrl(current);
+    const resp = await fetch(safeUrl, { redirect: "manual", headers });
+    const location = resp.headers.get("location");
+    if (resp.status >= 300 && resp.status < 400 && location) {
+      current = new URL(location, safeUrl).toString();
+      continue;
+    }
+    return resp;
+  }
+  throw new Error("יותר מדי הפניות (redirects) בדרך לקובץ");
+}
+
 function safeName(raw, fallback) {
   let s = (raw || fallback || "video").toString().trim();
   s = s.replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim();
@@ -96,6 +134,141 @@ async function fetchText(url, extraHeaders) {
   });
   if (!r.ok) throw new Error("http " + r.status + " בגישה ל-" + url);
   return await r.text();
+}
+
+// ---------- YouTube (innertube, no third-party library) ----------
+const YT_CLIENTS = {
+  ANDROID_VR: {
+    clientName: "ANDROID_VR",
+    clientVersion: "1.60.19",
+    clientNumber: "28",
+    deviceMake: "Oculus",
+    deviceModel: "Quest 3",
+    androidSdkVersion: 32,
+    platform: "MOBILE",
+    osName: "Android",
+    osVersion: "12L",
+    userAgent:
+      "com.google.android.apps.youtube.vr.oculus/1.60.19 " +
+      "(Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+  },
+};
+
+// A client playback nonce — YouTube rejects player requests without one.
+function clientPlaybackNonce(length) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  let out = "";
+  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+function youtubeVideoId(u) {
+  const host = u.hostname.replace(/^www\./, "").replace(/^m\./, "");
+  if (host === "youtu.be") {
+    const id = u.pathname.split("/").filter(Boolean)[0];
+    return id || null;
+  }
+  const v = u.searchParams.get("v");
+  if (v) return v;
+  // /shorts/<id>, /embed/<id>, /live/<id>, /v/<id>
+  const m = u.pathname.match(/\/(?:shorts|embed|live|v)\/([^/?#]+)/);
+  return m ? m[1] : null;
+}
+
+async function innertubePlayer(videoId, clientKey) {
+  const c = YT_CLIENTS[clientKey];
+  const payload = {
+    videoId,
+    cpn: clientPlaybackNonce(16),
+    contentCheckOk: true,
+    racyCheckOk: true,
+    context: {
+      client: {
+        clientName: c.clientName,
+        clientVersion: c.clientVersion,
+        ...(c.deviceMake ? { deviceMake: c.deviceMake } : {}),
+        ...(c.deviceModel ? { deviceModel: c.deviceModel } : {}),
+        ...(c.androidSdkVersion ? { androidSdkVersion: c.androidSdkVersion } : {}),
+        platform: c.platform,
+        osName: c.osName,
+        osVersion: c.osVersion,
+        hl: "en",
+        gl: "US",
+        utcOffsetMinutes: 0,
+      },
+      request: { internalExperimentFlags: [], useSsl: true },
+      user: { lockedSafetyMode: false },
+    },
+  };
+
+  const r = await fetch("https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": c.userAgent,
+      "X-Goog-Api-Format-Version": "2",
+      "X-YouTube-Client-Name": c.clientNumber,
+      "X-YouTube-Client-Version": c.clientVersion,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error("youtube api http " + r.status);
+  return await r.json();
+}
+
+// Progressive formats (audio+video in one file) are the only ones usable here —
+// adaptive DASH streams would need muxing, which is way out of scope for a
+// detector that just needs the pixels and the metadata.
+function pickProgressiveFormat(player) {
+  const formats = (player && player.streamingData && player.streamingData.formats) || [];
+  const usable = formats.filter((f) => f.url && (f.mimeType || "").startsWith("video/"));
+  if (!usable.length) return null;
+  // itag 18 = 360p mp4, small and fast to download — good enough for analysis.
+  return (
+    usable.find((f) => f.itag === 18) ||
+    usable.sort((a, b) => (a.contentLength || 0) - (b.contentLength || 0))[0]
+  );
+}
+
+// YouTube's block message is in English and says "sign in", which reads like
+// the user did something wrong. They didn't — YouTube refuses servers, not
+// them. Say that plainly, and point at the path that always works.
+const YT_BLOCKED_MESSAGE =
+  "יוטיוב חוסם הורדה של הסרטון הזה משרתים (זו חסימה שלהם, לא תקלה אצלנו). " +
+  'הדרך שתמיד עובדת: להוריד את הסרטון למכשיר ואז להעלות אותו כאן בלשונית "העלאת קובץ".';
+
+async function resolveYouTube(u) {
+  const videoId = youtubeVideoId(u);
+  if (!videoId) throw new Error("לא הצלחתי לזהות מזהה סרטון בקישור היוטיוב הזה");
+
+  let player;
+  try {
+    player = await innertubePlayer(videoId, "ANDROID_VR");
+  } catch (e) {
+    throw new Error("לא הצלחתי לדבר עם יוטיוב (" + ((e && e.message) || e) + ")");
+  }
+
+  const status = (player && player.playabilityStatus) || {};
+  if (status.status && status.status !== "OK") {
+    // LOGIN_REQUIRED is the bot-check; ERROR/UNPLAYABLE usually means the video
+    // is genuinely gone, private or region-locked — different message, because
+    // for those the upload workaround won't help either.
+    if (status.status === "LOGIN_REQUIRED") throw new Error(YT_BLOCKED_MESSAGE);
+    throw new Error(
+      "יוטיוב מדווח שהסרטון לא זמין" + (status.reason ? " (" + status.reason + ")" : "") +
+      " — יתכן שהוא פרטי, נמחק, או מוגבל באזור."
+    );
+  }
+
+  const format = pickProgressiveFormat(player);
+  if (!format) throw new Error(YT_BLOCKED_MESSAGE);
+
+  const title = safeName(player.videoDetails && player.videoDetails.title, "youtube");
+  return {
+    directUrl: format.url,
+    filename: title + ".mp4",
+    ua: YT_CLIENTS.ANDROID_VR.userAgent,
+  };
 }
 
 // ---------- TikTok ----------
@@ -159,13 +332,7 @@ async function resolveVideoUrl(targetUrl) {
   const host = u.hostname.replace(/^www\./, "").replace(/^m\./, "");
 
   if (host === "youtube.com" || host === "youtu.be" || host.endsWith(".youtube.com")) {
-    if (!ytdl.validateURL(targetUrl)) throw new Error("קישור יוטיוב לא תקין");
-    const info = await ytdl.getInfo(targetUrl);
-    let format = ytdl.chooseFormat(info.formats, { quality: "18" }); // 360p progressive mp4, small & fast
-    if (!format) format = ytdl.chooseFormat(info.formats, { filter: "audioandvideo", quality: "highest" });
-    if (!format) throw new Error("לא נמצא פורמט וידאו מתאים לסרטון הזה");
-    const title = safeName(info.videoDetails && info.videoDetails.title, "youtube");
-    return { kind: "ytdl", info, format, filename: title + ".mp4" };
+    return await resolveYouTube(u);
   }
 
   if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
@@ -206,26 +373,9 @@ export default async (req) => {
   try {
     const resolved = await resolveVideoUrl(targetUrl);
 
-    if (resolved.kind === "ytdl") {
-      const nodeStream = ytdl.downloadFromInfo(resolved.info, { format: resolved.format });
-      const webStream = Readable.toWeb(nodeStream);
-      return new Response(webStream, {
-        status: 200,
-        headers: {
-          "Content-Type": (resolved.format.mimeType || "video/mp4").split(";")[0],
-          "Content-Disposition": `attachment; filename="${resolved.filename}"`,
-          ...cors,
-        },
-      });
-    }
-
-    const safeUrl = await assertPublicHttpUrl(resolved.directUrl);
-    const upstream = await fetch(safeUrl, {
-      redirect: "error", // a redirect to a private address would bypass the check above
-      headers: {
-        "User-Agent": UA,
-        ...(resolved.referer ? { Referer: resolved.referer } : {}),
-      },
+    const upstream = await safeFetchFollowing(resolved.directUrl, {
+      "User-Agent": resolved.ua || UA,
+      ...(resolved.referer ? { Referer: resolved.referer } : {}),
     });
     if (!upstream.ok || !upstream.body) {
       throw new Error("השרת המקורי סירב לספק את הקובץ (סטטוס " + upstream.status + ")");
