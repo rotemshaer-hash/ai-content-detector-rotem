@@ -7,6 +7,9 @@
 // fetch has to happen from a server. This function is that server.
 //
 // Called by index.html as: /.netlify/functions/fetch-video?url=<encoded link>
+// (bundled with node_bundler = "nft", see netlify.toml — esbuild + external_node_modules
+// wasn't enough to fix the 404, this function needs a full content change to force Netlify
+// to rebuild it rather than reuse a stale cached bundle from before that fix)
 
 import ytdl from "@distube/ytdl-core";
 import { Readable } from "node:stream";
