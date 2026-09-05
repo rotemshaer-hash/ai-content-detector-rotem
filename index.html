@@ -37,7 +37,9 @@
   }
   .wrap{max-width:720px;margin:0 auto;padding:22px 16px 0;}
   header{padding:6px 0 18px;}
-  .titlerow{display:flex;align-items:center;justify-content:flex-end;gap:8px;}
+  /* flex-start, not flex-end: the page is dir="rtl", so flex-end is the LEFT
+     edge — which is what pushed the title away from the right side. */
+  .titlerow{display:flex;align-items:center;justify-content:flex-start;gap:8px;}
   h1{font-size:26px;margin:0;line-height:1.25;}
   h1 span{color:var(--accent);}
   .tagline{
@@ -169,6 +171,25 @@
     margin-top:16px;background:rgba(201,58,77,0.08);border:1px solid rgba(201,58,77,0.3);
     border-radius:12px;padding:14px;font-size:13.5px;line-height:1.7;color:#9c2436;
   }
+  /* A blocked link is a dead end unless we hand the user the way out, so the
+     rescue path is buttons rather than a sentence telling them what to do. */
+  .rescue{margin-top:12px;display:flex;flex-direction:column;gap:8px;}
+  .rescue .step{
+    display:flex;align-items:center;gap:9px;
+    padding:11px 13px;border-radius:10px;text-decoration:none;
+    font-size:14px;font-weight:700;cursor:pointer;border:none;width:100%;
+    font-family:inherit;text-align:right;
+  }
+  .rescue .step .num{
+    flex-shrink:0;width:20px;height:20px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:800;
+  }
+  .rescue .go{background:linear-gradient(180deg, var(--accent), #0a6f65);color:#fff;}
+  .rescue .go .num{background:rgba(255,255,255,0.25);color:#fff;}
+  .rescue .back{background:var(--panel);color:var(--text);border:1px solid var(--border);}
+  .rescue .back .num{background:var(--bg2);color:var(--muted);}
+  .rescue .step:active{opacity:.85;}
 
   .results{display:none;margin-top:18px;}
   .results.show{display:block;}
@@ -595,12 +616,37 @@
       offerDownload(file);
       await startAnalysis(file);
     }catch(err){
+      // Only ever put an http(s) link in the href — the URL came from a paste,
+      // and a javascript: scheme in there would run on click.
+      let safeHref='';
+      try{
+        const parsed=new URL(url);
+        if(parsed.protocol==='http:'||parsed.protocol==='https:') safeHref=parsed.href;
+      }catch(_e){}
+
       showError(
         'לא הצלחתי להביא את הסרטון מהקישור הזה.<br><br>'+
         (err&&err.message ? ('<b>סיבה:</b> '+escapeHtml(err.message)+'<br><br>') : '')+
-        'נתמכים כרגע: טיקטוק, טוויטר/X, יוטיוב (רק לחלק מהסרטונים — יוטיוב חוסמת הורדה משרתים), ובאופן חלקי אינסטגרם ופייסבוק (רק לפוסטים ציבוריים).<br><br>'+
-        '<b>חלופה:</b> הורידו את הסרטון למכשיר (למשל דרך שיתוף מתוך האפליקציה) ונסו דרך לשונית "העלאת קובץ".'
+        '<b>אבל יש דרך שתמיד עובדת</b> — שני צעדים:'+
+        '<div class="rescue">'+
+          (safeHref
+            ? '<a class="step go" href="'+escapeHtml(safeHref)+'" target="_blank" rel="noopener noreferrer">'+
+                '<span class="num">1</span><span>פתחו את הסרטון ושמרו אותו למכשיר</span>'+
+              '</a>'
+            : '<div class="step go"><span class="num">1</span><span>שמרו את הסרטון למכשיר</span></div>')+
+          '<button type="button" class="step back" id="goUpload">'+
+            '<span class="num">2</span><span>חזרו לכאן והעלו את הקובץ</span>'+
+          '</button>'+
+        '</div>'
       );
+      // Wired after the HTML is in the DOM — showError replaces innerHTML, so
+      // these elements only exist now.
+      const goUpload=document.getElementById('goUpload');
+      if(goUpload) goUpload.onclick=()=>{
+        tabUpload.click();
+        errbox.style.display='none';
+        dropzone.scrollIntoView({behavior:'smooth',block:'center'});
+      };
     }
   }
 
