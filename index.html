@@ -171,6 +171,11 @@
     margin-top:16px;background:rgba(201,58,77,0.08);border:1px solid rgba(201,58,77,0.3);
     border-radius:12px;padding:14px;font-size:13.5px;line-height:1.7;color:#9c2436;
   }
+  /* A known limitation is not a malfunction — a YouTube link gets the neutral
+     panel, red stays for things that actually went wrong. */
+  .errbox.info{
+    background:var(--panel);border-color:var(--border);color:var(--text);
+  }
   /* A blocked link is a dead end unless we hand the user the way out, so the
      rescue path is buttons rather than a sentence telling them what to do. */
   .rescue{margin-top:12px;display:flex;flex-direction:column;gap:8px;}
@@ -318,7 +323,9 @@
       <button class="btn" id="urlGo">בדוק</button>
     </div>
     <div class="urlhint">
-      תומך בהדבקת קישור מ<b>טיקטוק, טוויטר/X ויוטיוב</b> — הכלי מביא את הסרטון בעצמו דרך שרת ביניים משלנו (כי הפלטפורמות האלה חוסמות גישה ישירה מהדפדפן). <b>ביוטיוב:</b> יוטיוב חוסמת היום הורדה משרתים ברוב הסרטונים, אז קישור יוטיוב יעבוד רק לחלק מהם — אם הוא נחסם, פשוט הורידו את הסרטון למכשיר והעלו אותו בלשונית "העלאת קובץ" (זה תמיד עובד). באינסטגרם ובפייסבוק זה עובד רק לפוסטים <b>ציבוריים</b> (לא פרטיים ולא דורשי-התחברות). קישור ישיר לקובץ וידאו/תמונה עם CORS פתוח גם יעבוד כרגיל.
+      תומך בהדבקת קישור מ<b>טיקטוק וטוויטר/X</b> — הכלי מביא את הסרטון בעצמו דרך שרת ביניים משלנו (כי הפלטפורמות האלה חוסמות גישה ישירה מהדפדפן). באינסטגרם ובפייסבוק זה עובד רק לפוסטים <b>ציבוריים</b> (לא פרטיים ולא דורשי-התחברות). קישור ישיר לקובץ וידאו/תמונה עם CORS פתוח גם יעבוד כרגיל.
+      <br><br>
+      <b>יוטיוב:</b> יוטיוב חוסמת הורדת סרטונים דרך שרת, ולכן קישור יוטיוב לא ייבדק אוטומטית. הדביקו אותו בכל זאת ותקבלו את שני הצעדים המדויקים להורדה ולהעלאה — זה לוקח כמה שניות ותמיד עובד.
       <br><br>
       <b>לגבי פרטיות:</b> בניגוד להעלאת קובץ (שרצה כולה בדפדפן שלכם), קישור מרשת חברתית עובר דרך שרת הביניים שלנו כדי להוריד אותו — הוא לא נשמר שם ולא נשלח הלאה לשום מקום אחר, אבל זה שונה מהמצב הרגיל של "שום קובץ לא יוצא מהדפדפן". ניתוח ה-AI עצמו עדיין רץ אצלכם בדפדפן, אחרי שהקובץ מגיע.
     </div>
@@ -572,10 +579,56 @@
     if(typeof pct==='number') progfill.style.width=pct+'%';
   }
   function hideStatus(){statusBox.classList.remove('show');progfill.style.width='0%';}
-  function showError(html){
+  // kind 'info' for something expected that the user can act on (a YouTube
+  // link), 'error' for something that actually went wrong — a known limitation
+  // shouldn't be dressed up in red as if the app broke.
+  function showError(html,kind){
     errbox.style.display='block';
+    errbox.classList.toggle('info',kind==='info');
     errbox.innerHTML=html;
     hideStatus();
+  }
+
+  function isYouTubeLink(url){
+    try{
+      const h=new URL(url).hostname.replace(/^www\./,'').replace(/^m\./,'');
+      return h==='youtube.com'||h==='youtu.be'||h.endsWith('.youtube.com');
+    }catch(_e){ return false; }
+  }
+
+  // The two-step way out, used both for YouTube (where we know up front it
+  // won't fetch) and for any other link that fails.
+  function showRescue(url,leadHtml,kind){
+    // Only ever put an http(s) link in the href — the URL came from a paste,
+    // and a javascript: scheme in there would run on click.
+    let safeHref='';
+    try{
+      const parsed=new URL(url);
+      if(parsed.protocol==='http:'||parsed.protocol==='https:') safeHref=parsed.href;
+    }catch(_e){}
+
+    showError(
+      leadHtml+
+      '<div class="rescue">'+
+        (safeHref
+          ? '<a class="step go" href="'+escapeHtml(safeHref)+'" target="_blank" rel="noopener noreferrer">'+
+              '<span class="num">1</span><span>פתחו את הסרטון ושמרו אותו למכשיר</span>'+
+            '</a>'
+          : '<div class="step go"><span class="num">1</span><span>שמרו את הסרטון למכשיר</span></div>')+
+        '<button type="button" class="step back" id="goUpload">'+
+          '<span class="num">2</span><span>חזרו לכאן והעלו את הקובץ</span>'+
+        '</button>'+
+      '</div>',
+      kind
+    );
+    // Wired after the HTML is in the DOM — showError replaces innerHTML, so
+    // this element only exists now.
+    const goUpload=document.getElementById('goUpload');
+    if(goUpload) goUpload.onclick=()=>{
+      tabUpload.click();
+      errbox.style.display='none';
+      dropzone.scrollIntoView({behavior:'smooth',block:'center'});
+    };
   }
 
   // ---------- URL mode ----------
@@ -592,6 +645,22 @@
     errbox.style.display='none';
     results.classList.remove('show');
     dlBar.classList.remove('show');
+
+    // YouTube refuses server-side downloads for the overwhelming majority of
+    // videos — measured against the live API, 1 of 11 real videos resolved.
+    // Spinning for a couple of seconds before failing 9 times out of 10 is
+    // worse than being straight about it, so YouTube links go directly to the
+    // path that always works. (The server still knows how to fetch YouTube;
+    // it just isn't worth sending people through a coin flip to reach it.)
+    if(isYouTubeLink(url)){
+      showRescue(url,
+        '<b>יוטיוב חוסמת הורדת סרטונים דרך שרת.</b><br><br>'+
+        'זו חסימה מצד יוטיוב ולא תקלה באתר — היא חלה כמעט על כל הסרטונים. '+
+        'כדי לבדוק סרטון מיוטיוב, שני צעדים:',
+        'info');
+      return;
+    }
+
     setStatus('פותח את הקישור ברשת החברתית...',10);
     try{
       const proxied='/.netlify/functions/fetch-video?url='+encodeURIComponent(url);
@@ -616,37 +685,10 @@
       offerDownload(file);
       await startAnalysis(file);
     }catch(err){
-      // Only ever put an http(s) link in the href — the URL came from a paste,
-      // and a javascript: scheme in there would run on click.
-      let safeHref='';
-      try{
-        const parsed=new URL(url);
-        if(parsed.protocol==='http:'||parsed.protocol==='https:') safeHref=parsed.href;
-      }catch(_e){}
-
-      showError(
+      showRescue(url,
         'לא הצלחתי להביא את הסרטון מהקישור הזה.<br><br>'+
         (err&&err.message ? ('<b>סיבה:</b> '+escapeHtml(err.message)+'<br><br>') : '')+
-        '<b>אבל יש דרך שתמיד עובדת</b> — שני צעדים:'+
-        '<div class="rescue">'+
-          (safeHref
-            ? '<a class="step go" href="'+escapeHtml(safeHref)+'" target="_blank" rel="noopener noreferrer">'+
-                '<span class="num">1</span><span>פתחו את הסרטון ושמרו אותו למכשיר</span>'+
-              '</a>'
-            : '<div class="step go"><span class="num">1</span><span>שמרו את הסרטון למכשיר</span></div>')+
-          '<button type="button" class="step back" id="goUpload">'+
-            '<span class="num">2</span><span>חזרו לכאן והעלו את הקובץ</span>'+
-          '</button>'+
-        '</div>'
-      );
-      // Wired after the HTML is in the DOM — showError replaces innerHTML, so
-      // these elements only exist now.
-      const goUpload=document.getElementById('goUpload');
-      if(goUpload) goUpload.onclick=()=>{
-        tabUpload.click();
-        errbox.style.display='none';
-        dropzone.scrollIntoView({behavior:'smooth',block:'center'});
-      };
+        '<b>אבל יש דרך שתמיד עובדת</b> — שני צעדים:');
     }
   }
 
