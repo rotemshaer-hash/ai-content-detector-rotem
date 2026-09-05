@@ -195,6 +195,11 @@
   .rescue .back{background:var(--panel);color:var(--text);border:1px solid var(--border);}
   .rescue .back .num{background:var(--bg2);color:var(--muted);}
   .rescue .step:active{opacity:.85;}
+  .rescue .step span:last-child{line-height:1.45;}
+  .errbox .note{
+    margin-top:11px;padding-top:10px;border-top:1px solid var(--border);
+    font-size:12.5px;line-height:1.6;color:var(--muted);
+  }
 
   .results{display:none;margin-top:18px;}
   .results.show{display:block;}
@@ -325,7 +330,7 @@
     <div class="urlhint">
       תומך בהדבקת קישור מ<b>טיקטוק וטוויטר/X</b> — הכלי מביא את הסרטון בעצמו דרך שרת ביניים משלנו (כי הפלטפורמות האלה חוסמות גישה ישירה מהדפדפן). באינסטגרם ובפייסבוק זה עובד רק לפוסטים <b>ציבוריים</b> (לא פרטיים ולא דורשי-התחברות). קישור ישיר לקובץ וידאו/תמונה עם CORS פתוח גם יעבוד כרגיל.
       <br><br>
-      <b>יוטיוב:</b> יוטיוב חוסמת הורדת סרטונים דרך שרת, ולכן קישור יוטיוב לא ייבדק אוטומטית. הדביקו אותו בכל זאת ותקבלו את שני הצעדים המדויקים להורדה ולהעלאה — זה לוקח כמה שניות ותמיד עובד.
+      <b>יוטיוב לא נתמך.</b> יוטיוב לא מאפשר לשמור סרטון כקובץ במכשיר (גם לא ב-Shorts, וגם לא עם Premium), ולכן אין דרך להעביר אותו לבדיקה. אם אותו סרטון קיים גם בטיקטוק או באינסטגרם — הדביקו את הקישור משם.
       <br><br>
       <b>לגבי פרטיות:</b> בניגוד להעלאת קובץ (שרצה כולה בדפדפן שלכם), קישור מרשת חברתית עובר דרך שרת הביניים שלנו כדי להוריד אותו — הוא לא נשמר שם ולא נשלח הלאה לשום מקום אחר, אבל זה שונה מהמצב הרגיל של "שום קובץ לא יוצא מהדפדפן". ניתוח ה-AI עצמו עדיין רץ אצלכם בדפדפן, אחרי שהקובץ מגיע.
     </div>
@@ -596,8 +601,38 @@
     }catch(_e){ return false; }
   }
 
-  // The two-step way out, used both for YouTube (where we know up front it
-  // won't fetch) and for any other link that fails.
+  function goToUpload(){
+    tabUpload.click();
+    errbox.style.display='none';
+    dropzone.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  // YouTube gets its own notice rather than the generic "save it and come
+  // back": on Shorts there is no save-to-device button at all (the bookmark
+  // is a playlist, and even a Premium download stays locked inside the app),
+  // so telling people to save the file sends them somewhere that doesn't
+  // exist. These two are what actually remain.
+  function showYouTubeNotice(){
+    showError(
+      '<b>יוטיוב לא מאפשר לשמור סרטונים כקובץ במכשיר</b> — גם לא ב-Shorts, וגם לא עם מנוי Premium '+
+      '(ההורדה שם נשארת נעולה בתוך האפליקציה). לכן אי אפשר לבדוק סרטון מיוטיוב אוטומטית.<br><br>'+
+      '<b>שתי דרכים שכן עובדות:</b>'+
+      '<div class="rescue">'+
+        '<div class="step go"><span class="num">1</span><span>מצאתם את אותו סרטון בטיקטוק / אינסטגרם / X? הדביקו את הקישור משם — הבדיקה תרוץ במלואה</span></div>'+
+        '<button type="button" class="step back" id="goUpload">'+
+          '<span class="num">2</span><span>או: הקליטו את המסך בזמן שהסרטון מתנגן, והעלו את ההקלטה</span>'+
+        '</button>'+
+      '</div>'+
+      '<div class="note">שימו לב: בהקלטת מסך הבדיקה <b>פחות מדויקת</b> — הסימנים המוסתרים בתוך הקובץ המקורי '+
+      'נמחקים בהקלטה, ונשארת רק התמונה עצמה לניתוח.</div>',
+      'info'
+    );
+    const goUpload=document.getElementById('goUpload');
+    if(goUpload) goUpload.onclick=goToUpload;
+  }
+
+  // The two-step way out for a link that failed to fetch. Unlike YouTube,
+  // these platforms do let you save the video, so this path is real.
   function showRescue(url,leadHtml,kind){
     // Only ever put an http(s) link in the href — the URL came from a paste,
     // and a javascript: scheme in there would run on click.
@@ -624,11 +659,7 @@
     // Wired after the HTML is in the DOM — showError replaces innerHTML, so
     // this element only exists now.
     const goUpload=document.getElementById('goUpload');
-    if(goUpload) goUpload.onclick=()=>{
-      tabUpload.click();
-      errbox.style.display='none';
-      dropzone.scrollIntoView({behavior:'smooth',block:'center'});
-    };
+    if(goUpload) goUpload.onclick=goToUpload;
   }
 
   // ---------- URL mode ----------
@@ -653,11 +684,7 @@
     // path that always works. (The server still knows how to fetch YouTube;
     // it just isn't worth sending people through a coin flip to reach it.)
     if(isYouTubeLink(url)){
-      showRescue(url,
-        '<b>יוטיוב חוסמת הורדת סרטונים דרך שרת.</b><br><br>'+
-        'זו חסימה מצד יוטיוב ולא תקלה באתר — היא חלה כמעט על כל הסרטונים. '+
-        'כדי לבדוק סרטון מיוטיוב, שני צעדים:',
-        'info');
+      showYouTubeNotice();
       return;
     }
 
