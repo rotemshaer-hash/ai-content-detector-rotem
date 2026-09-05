@@ -6,6 +6,13 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+[functions."fetch-video"]
+  # @distube/ytdl-core uses dynamic requires internally that esbuild can trip
+  # over — if it fails to bundle, Netlify silently drops just this function
+  # (deploy still reports success, but the endpoint 404s). Leaving it external
+  # makes Node resolve it from node_modules at runtime instead of bundling it.
+  external_node_modules = ["@distube/ytdl-core"]
+
 [[headers]]
   for = "/.netlify/functions/*"
   [headers.values]
