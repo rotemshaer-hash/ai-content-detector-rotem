@@ -40,6 +40,10 @@
   .titlerow{display:flex;align-items:center;justify-content:flex-end;gap:8px;}
   h1{font-size:26px;margin:0;line-height:1.25;}
   h1 span{color:var(--accent);}
+  .tagline{
+    margin:8px 0 0;font-size:14.5px;line-height:1.6;color:var(--muted);
+  }
+  .tagline b{color:var(--text);font-weight:600;}
   .infobtn{
     position:relative;
     width:26px;height:26px;border-radius:50%;flex-shrink:0;
@@ -75,6 +79,7 @@
   }
 
   .dropzone{
+    position:relative;
     border:1.5px dashed #9db2bc;border-radius:14px;padding:32px 16px;
     text-align:center;cursor:pointer;background:var(--bg2);transition:.15s;
   }
@@ -82,7 +87,16 @@
   .dropzone .icon{font-size:30px;margin-bottom:10px;color:var(--accent2);}
   .dropzone p{margin:4px 0;color:var(--text);font-size:15px;}
   .dropzone small{color:var(--muted);font-size:12.5px;}
-  input[type=file]{display:none;}
+  /* The file input is the real, tappable control — laid over the whole
+     dropzone and made invisible, rather than hidden with display:none and
+     opened by a JS .click(). In-app browsers (opening the link from WhatsApp,
+     Facebook, Instagram) routinely refuse to open a picker for an input that
+     isn't actually rendered, which made the upload button look dead. This way
+     the tap lands on the native control itself, so there is nothing to refuse. */
+  #fileInput{
+    position:absolute;inset:0;width:100%;height:100%;
+    opacity:0;cursor:pointer;font-size:0;
+  }
 
   .urlrow{display:flex;gap:8px;}
   .urlrow input[type=text]{
@@ -250,6 +264,10 @@
       <h1>גלאי תוכן <span>AI</span></h1>
       <button type="button" class="infobtn" id="infoBtn" aria-expanded="false" aria-controls="infoPanel">ⓘ</button>
     </div>
+    <p class="tagline">
+      חושדים שסרטון או תמונה נוצרו ב-AI? <b>העלו וקבלו תשובה תוך שניות.</b>
+      הכל רץ אצלכם בדפדפן — שום קובץ לא יוצא מהמכשיר.
+    </p>
     <div class="infopanel" id="infoPanel" hidden>
       בודק סרטון או תמונה ומחפש סימנים לכך שנוצרו בכלי AI — לפי מטא-דאטה וניתוח חזותי. זו <b>אינדיקציה</b> בלבד ולא קביעה סופית; אין היום שיטה שמזהה תוכן-AI ב-100% ודאות, אז תמיד כדאי להסתכל על הפירוט ולשפוט בעצמכם.
     </div>
@@ -265,8 +283,8 @@
       <div class="icon">&#8593;</div>
       <p>גררו סרטון או תמונה לכאן, או הקישו לבחירה</p>
       <small>MP4 / MOV / WebM / JPG / PNG / WebP · מומלץ עד כ-300MB</small>
+      <input type="file" id="fileInput" accept="video/*,image/*" aria-label="בחירת סרטון או תמונה לבדיקה">
     </div>
-    <input type="file" id="fileInput">
     <div class="filepill" id="filepill" style="display:none;">
       <span class="name" id="filename"></span>
       <span class="size" id="filesize"></span>
@@ -421,7 +439,9 @@
   tabUrl.onclick=()=>{tabUrl.classList.add('active');tabUpload.classList.remove('active');panelUrl.style.display='block';panelUpload.style.display='none';};
 
   // ---------- Upload UI ----------
-  dropzone.onclick=()=>fileInput.click();
+  // No dropzone.onclick here on purpose: the file input itself covers the
+  // dropzone, so a tap already lands on the native control. Calling .click()
+  // as well would open the picker twice.
   dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('drag');});
   dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('drag'));
   dropzone.addEventListener('drop',e=>{
