@@ -737,77 +737,132 @@
   // Walks the relays, then the copies each one offers, and returns the first
   // that actually yields bytes. One dead relay or one dead URL says nothing
   // about the next — that assumption cost this feature a whole morning.
-  async function fetchYouTubeInBrowser(videoId,onStatus){
-    // Every relay's outcome is kept and reported. The first version lumped "the
-    // relay answered with an error" together with "the relay never answered"
-    // and told the user the second — which is the exact habit of hiding the
-    // real reason behind one summary that cost this project most of a day.
-    const notes=[];
-    for(let i=0;i<YT_RELAYS.length;i++){
-      const relay=YT_RELAYS[i];
-      const base=relay.base;
-      const who=relayName(base);
-      onStatus('מחפש את הסרטון ('+(i+1)+'/'+YT_RELAYS.length+')...',10+Math.round(i*40/YT_RELAYS.length));
+  // The built-in list is a floor, not the answer: only 2 of 9 hardcoded hosts
+  // were reachable from a real phone, and volunteers add and retire instances
+  // constantly. Our server can read the public directories that the browser
+  // cannot (they send no CORS headers), so it hands over a current list —
+  // and nothing else. It never learns which video, and never touches the file.
+  let relayListPromise=null;
+  function loadRelayList(){
+    if(relayListPromise) return relayListPromise;
+    relayListPromise=fetchWithTimeout('/.netlify/functions/yt-relays',6000)
+      .then((r)=>r.ok?r.json():null)
+      .then((j)=>{
+        const fresh=(j&&Array.isArray(j.relays))?j.relays:[];
+        const merged=[];
+        const seen=new Set();
+        // Ours first — these are the ones observed working from a browser.
+        YT_RELAYS.forEach((r)=>{ if(!seen.has(r.base)){ seen.add(r.base); merged.push(r); } });
+        fresh.forEach((base)=>{ if(!seen.has(base)){ seen.add(base); merged.push({type:'piped',base}); } });
+        return merged;
+      })
+      .catch(()=>YT_RELAYS.slice());
+    return relayListPromise;
+  }
 
-      const metaUrl=(relay.type==='piped')
-        ? base+'/streams/'+encodeURIComponent(videoId)
-        : base+'/api/v1/videos/'+encodeURIComponent(videoId);
-
+  // Asks one relay what copies it has. Never throws: an outcome is a result.
+  async function askRelay(relay,videoId){
+    const base=relay.base;
+    const who=relayName(base);
+    const metaUrl=(relay.type==='invidious')
+      ? base+'/api/v1/videos/'+encodeURIComponent(videoId)
+      : base+'/streams/'+encodeURIComponent(videoId);
+    try{
+      const r=await fetchWithTimeout(metaUrl,9000,{headers:{'Accept':'application/json'}});
+      const text=await r.text();
       let meta=null;
-      try{
-        const r=await fetchWithTimeout(metaUrl,12000,{headers:{'Accept':'application/json'}});
-        const text=await r.text();
-        let parsed=null;
-        try{ parsed=JSON.parse(text); }catch(_e){}
-        if(!r.ok){
-          // The relay states the reason in the body — including, usefully, when
-          // YouTube has bot-blocked the relay's own address. A bare status
-          // number would hide exactly the fact that matters.
-          const why=(parsed&&(parsed.error||parsed.message))||text.slice(0,70);
-          notes.push(who+': '+r.status+(why?' '+String(why).split('\n')[0].slice(0,70):''));
-          continue;
-        }
-        meta=parsed;
-        if(!meta){ notes.push(who+': תשובה לא קריאה'); continue; }
-      }catch(e){
-        notes.push(who+': '+((e&&e.name==='AbortError')?'לא הגיב בזמן':'לא נגיש'));
-        continue;
+      try{ meta=JSON.parse(text); }catch(_e){}
+      if(!r.ok){
+        // The relay states the reason in the body — including, usefully, when
+        // YouTube has bot-blocked the relay's own address. A bare status number
+        // would hide exactly the fact that matters.
+        const why=(meta&&(meta.error||meta.message))||text.slice(0,70);
+        return {who,note:who+': '+r.status+(why?' '+String(why).split('\n')[0].slice(0,60):'')};
       }
-
-      const candidates=(relay.type==='piped')
-        ? youtubeStreamCandidates(meta)
-        : invidiousCandidates(meta,videoId,base);
+      if(!meta) return {who,note:who+': תשובה לא קריאה'};
+      const candidates=(relay.type==='invidious')
+        ? invidiousCandidates(meta,videoId,base)
+        : youtubeStreamCandidates(meta);
       if(!candidates.length){
-        notes.push(who+': '+((meta&&meta.error)?String(meta.error).slice(0,50):'בלי עותק שמיש'));
-        continue;
+        return {who,note:who+': '+((meta.error)?String(meta.error).slice(0,50):'בלי עותק שמיש')};
       }
-
-      let lastFail='';
-      for(const cand of candidates.slice(0,4)){
-        try{
-          onStatus('מוריד את הסרטון דרך '+who+'...',60);
-          // Range is not politeness here: the probe that proved this route
-          // works asked for a byte range, and asking for the whole file with no
-          // Range came back empty. Proxies in front of media commonly serve
-          // only ranged requests properly.
-          const resp=await fetchWithTimeout(cand.url,90000,{headers:{Range:'bytes=0-'}});
-          if(!resp.ok&&resp.status!==206){ lastFail='HTTP '+resp.status; continue; }
-          const blob=await resp.blob();
-          // Anything this small is an error page wearing a video's content
-          // type, not a video. Report what it actually was.
-          if(!blob||blob.size<10000){
-            lastFail='קיבלתי '+(blob?blob.size:0)+' בייטים בלבד'+
-              (blob&&blob.type?' ('+blob.type+')':'');
-            continue;
-          }
-          return {blob, title:(meta.title||'youtube'), relay:who};
-        }catch(e){
-          lastFail=(e&&e.name==='AbortError')?'ההורדה נתקעה':'ההורדה נחסמה';
-        }
-      }
-      notes.push(who+': '+candidates.length+' עותקים, אף אחד לא ירד'+(lastFail?' ('+lastFail+')':''));
+      return {who,meta,candidates};
+    }catch(e){
+      return {who,note:who+': '+((e&&e.name==='AbortError')?'לא הגיב בזמן':'לא נגיש')};
     }
-    throw new Error(notes.join(' · '));
+  }
+
+  async function fetchYouTubeInBrowser(videoId,onStatus){
+    // Every relay's outcome is kept and reported. An early version lumped "the
+    // relay answered with an error" together with "the relay never answered"
+    // and told the user the second — the same habit of hiding the real reason
+    // behind one summary that cost this project most of a day.
+    onStatus('מכין רשימת שרתים...',6);
+    const relays=await loadRelayList();
+    const notes=[];
+
+    // Asked in parallel batches: the list is now dozens long, most hosts fail
+    // instantly, and walking it one at a time would leave the user watching a
+    // spinner for a minute to reach the one that works.
+    const BATCH=6;
+    for(let i=0;i<relays.length;i+=BATCH){
+      const batch=relays.slice(i,i+BATCH);
+      onStatus('מחפש את הסרטון ('+Math.min(i+BATCH,relays.length)+'/'+relays.length+')...',
+        10+Math.round(i*40/Math.max(relays.length,1)));
+      const answers=await Promise.all(batch.map((r)=>askRelay(r,videoId)));
+
+      for(const ans of answers){
+        if(!ans.candidates){ notes.push(ans.note); continue; }
+
+        let lastFail='';
+        for(const cand of ans.candidates.slice(0,4)){
+          try{
+            onStatus('מוריד את הסרטון דרך '+ans.who+'...',60);
+            // Range is not politeness here: the probe that proved this route
+            // works asked for a byte range, and asking for the whole file with
+            // no Range came back empty. Proxies in front of media commonly
+            // serve only ranged requests properly.
+            const resp=await fetchWithTimeout(cand.url,90000,{headers:{Range:'bytes=0-'}});
+            if(!resp.ok&&resp.status!==206){ lastFail='HTTP '+resp.status; continue; }
+            const blob=await resp.blob();
+            // Anything this small is an error page wearing a video's content
+            // type, not a video. Report what it actually was.
+            if(!blob||blob.size<10000){
+              lastFail='קיבלתי '+(blob?blob.size:0)+' בייטים בלבד'+
+                (blob&&blob.type?' ('+blob.type+')':'');
+              continue;
+            }
+            return {blob, title:(ans.meta.title||'youtube'), relay:ans.who};
+          }catch(e){
+            lastFail=(e&&e.name==='AbortError')?'ההורדה נתקעה':'ההורדה נחסמה';
+          }
+        }
+        notes.push(ans.who+': '+ans.candidates.length+' עותקים, אף אחד לא ירד'+(lastFail?' ('+lastFail+')':''));
+      }
+    }
+
+    // With dozens of relays the raw list is a wall, and a plain cap trims away
+    // distinct information while keeping the third copy of the same sentence.
+    // Group by reason first, so the cap spends its room on things that differ.
+    const spoke=notes.filter((n)=>!/לא נגיש|לא הגיב בזמן/.test(n));
+    const silent=notes.length-spoke.length;
+
+    const groups=new Map();
+    spoke.forEach((n)=>{
+      const idx=n.indexOf(': ');
+      const who=idx>0?n.slice(0,idx):n;
+      const reason=idx>0?n.slice(idx+2):n;
+      if(!groups.has(reason)) groups.set(reason,[]);
+      groups.get(reason).push(who);
+    });
+
+    const parts=[];
+    for(const [reason,whos] of groups){
+      if(parts.length>=5) break;
+      parts.push(whos.length>1 ? (whos.length+' שרתים: '+reason) : (whos[0]+': '+reason));
+    }
+    if(silent) parts.push(silent+' שרתים נוספים לא נגישים מהרשת שלכם');
+    throw new Error(parts.join(' · ')||'לא נמצא אף שרת זמין.');
   }
 
   function goToUpload(){
