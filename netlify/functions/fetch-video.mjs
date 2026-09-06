@@ -129,7 +129,11 @@ function safeName(raw, fallback) {
 }
 
 async function fetchText(url, extraHeaders) {
-  const r = await fetch(url, {
+  // Guarded like every other outbound fetch here. The callers currently pass
+  // host-checked URLs, but this reads a remote page into our process and the
+  // check belongs at the fetch, not in the memory of whoever calls it.
+  const safeUrl = await assertPublicHttpUrl(url);
+  const r = await fetch(safeUrl, {
     headers: { "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9", ...extraHeaders },
   });
   if (!r.ok) throw new Error("http " + r.status + " בגישה ל-" + url);
@@ -272,14 +276,76 @@ async function resolveYouTube(u) {
 }
 
 // ---------- TikTok ----------
+// The share sheet hands out vt./vm.tiktok.com shorteners, and those are what
+// people actually paste. Passing one straight to the resolver is what made a
+// perfectly public video come back as "private or removed": the shortener is
+// an opaque redirect, not the post. Expand it to the canonical
+// /@user/video/<id> URL first, then resolve that.
+const TIKTOK_SHORT_HOSTS = ["vt.tiktok.com", "vm.tiktok.com", "t.tiktok.com"];
+
+function isTikTokShortLink(u) {
+  return TIKTOK_SHORT_HOSTS.includes(u.hostname.toLowerCase().replace(/^www\./, ""));
+}
+
+function isTikTokHost(u) {
+  const h = u.hostname.toLowerCase().replace(/^www\./, "");
+  return h === "tiktok.com" || h.endsWith(".tiktok.com");
+}
+
+async function expandTikTokShortLink(url) {
+  let current = url;
+  for (let hop = 0; hop < 4; hop++) {
+    const parsed = new URL(current);
+    if (!isTikTokShortLink(parsed)) break;
+    const safeUrl = await assertPublicHttpUrl(current); // every hop re-checked
+    const r = await fetch(safeUrl, { redirect: "manual", headers: { "User-Agent": UA } });
+    const location = r.headers.get("location");
+    if (!location) break;
+    current = new URL(location, safeUrl).toString();
+  }
+  // Where a redirect lands is decided by the far end, not by us, and the
+  // result is fetched again downstream (the og:video fallback). A shortener
+  // that pointed anywhere but TikTok would turn this into an open redirect
+  // into our own outbound fetches, so anything off-platform is discarded and
+  // the original URL stands.
+  try {
+    const final = new URL(current);
+    if ((final.protocol === "http:" || final.protocol === "https:") && isTikTokHost(final)) {
+      return current;
+    }
+  } catch {}
+  return url;
+}
+
 async function resolveTikTok(url) {
-  const api = "https://www.tikwm.com/api/?url=" + encodeURIComponent(url) + "&hd=1";
+  let canonical = url;
+  try {
+    canonical = await expandTikTokShortLink(url);
+  } catch {
+    // fall through with the original — the resolver may still cope with it
+  }
+
+  const api = "https://www.tikwm.com/api/?url=" + encodeURIComponent(canonical) + "&hd=1";
   const r = await fetch(api, { headers: { "User-Agent": UA } });
   if (!r.ok) throw new Error("tikwm http " + r.status);
   const j = await r.json();
   const d = j && j.data;
   const play = d && (d.hdplay || d.play);
-  if (!play) throw new Error("לא נמצא קישור וידאו בטיקטוק (יתכן שהפוסט פרטי או הוסר)");
+
+  if (!play) {
+    // Second opinion before giving up: the post's own page carries an og:video
+    // for public videos, so a resolver miss isn't proof the post is private.
+    try {
+      return await resolveByOgVideo(canonical, "טיקטוק", "https://www.tiktok.com/");
+    } catch {
+      throw new Error(
+        "לא הצלחתי לחלץ את הסרטון מטיקטוק" +
+        (j && j.msg ? " (" + j.msg + ")" : "") +
+        " — יתכן שהפוסט פרטי, הוסר, או מוגבל באזור."
+      );
+    }
+  }
+
   return {
     directUrl: play,
     filename: safeName(d.title, "tiktok") + ".mp4",
