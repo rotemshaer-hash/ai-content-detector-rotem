@@ -122,6 +122,18 @@ async function safeFetchFollowing(startUrl, headers, maxHops = 4) {
   throw new Error("יותר מדי הפניות (redirects) בדרך לקובץ");
 }
 
+// HTTP header values are Latin-1 only. A TikTok title in Hebrew (or any
+// non-Latin script) put straight into Content-Disposition makes building the
+// Response throw — "character at index N has a value of 1497" — after the video
+// has already been fetched, so a completely successful download died on its
+// last line. RFC 6266 covers exactly this: an ASCII filename for anything old,
+// and filename* carrying the real UTF-8 name for anything modern.
+function contentDisposition(name) {
+  const safe = String(name || "video.mp4");
+  const ascii = safe.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "'").trim() || "video.mp4";
+  return 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(safe);
+}
+
 function safeName(raw, fallback) {
   let s = (raw || fallback || "video").toString().trim();
   s = s.replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim();
@@ -532,7 +544,7 @@ export default async (req) => {
       status: 200,
       headers: {
         "Content-Type": upstream.headers.get("content-type") || "video/mp4",
-        "Content-Disposition": `attachment; filename="${resolved.filename}"`,
+        "Content-Disposition": contentDisposition(resolved.filename),
         ...cors,
       },
     });

@@ -739,16 +739,39 @@
       setStatus('שומר את הקובץ...',65);
       const blob=await resp.blob();
       if(blob.size===0) throw new Error('הקובץ שהתקבל ריק');
+      // filename* carries the real UTF-8 name (HTTP headers can't hold Hebrew,
+      // so the plain filename is an ASCII stand-in with the letters replaced).
+      // Prefer the encoded one so the saved file keeps its actual title.
       const cd=resp.headers.get('content-disposition')||'';
-      const nameMatch=cd.match(/filename="([^"]+)"/);
-      const guessedName=nameMatch ? nameMatch[1] : (url.split('/').pop()||'video').split('?')[0];
+      let guessedName='';
+      const utf8Match=cd.match(/filename\*=UTF-8''([^;]+)/i);
+      if(utf8Match){ try{ guessedName=decodeURIComponent(utf8Match[1].trim()); }catch(_e){} }
+      if(!guessedName){
+        const nameMatch=cd.match(/filename="([^"]+)"/);
+        guessedName=nameMatch ? nameMatch[1] : '';
+      }
+      if(!guessedName) guessedName=(url.split('/').pop()||'video').split('?')[0];
       const guessType=blob.type||'video/mp4';
       const file=new File([blob], guessedName, {type:guessType});
       filepill.style.display='flex';
       filenameEl.textContent=file.name;
       filesizeEl.textContent=fmtBytes(file.size);
       offerDownload(file);
-      await startAnalysis(file);
+
+      // Past this point the video is here — it downloaded and is already
+      // offered for saving. A failure in the analysis is a different fault
+      // from a failure to fetch, and telling someone "I couldn't get the
+      // video from this link" while the video sits on screen is exactly the
+      // kind of wrong diagnosis that wastes their time.
+      try{
+        await startAnalysis(file);
+      }catch(analysisErr){
+        showError(
+          '<b>הסרטון הורד בהצלחה, אבל הניתוח נכשל.</b><br><br>'+
+          (analysisErr&&analysisErr.message ? ('<b>סיבה:</b> '+escapeHtml(analysisErr.message)+'<br><br>') : '')+
+          'הקובץ שמור אצלכם בכפתור ההורדה למעלה — נסו להעלות אותו דרך לשונית "העלאת קובץ".'
+        );
+      }
     }catch(err){
       showRescue(url,
         'לא הצלחתי להביא את הסרטון מהקישור הזה.<br><br>'+
