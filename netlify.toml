@@ -6,6 +6,16 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+[functions."fetch-video"]
+  # The only build of this function ever confirmed working in production was
+  # bundled with nft. Dropping ytdl-core also dropped this override back to
+  # esbuild — two changes at once — and the endpoint went back to answering a
+  # bare, non-JSON 404, which is the platform not finding the function rather
+  # than the function failing. Restoring the known-good bundler; nft simply
+  # copies the traced files instead of rewriting them into one output, so
+  # there is less that can go wrong at build time.
+  node_bundler = "nft"
+
 [[headers]]
   for = "/.netlify/functions/*"
   [headers.values]

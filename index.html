@@ -694,9 +694,19 @@
       setStatus('מוריד את הסרטון (יכול לקחת כמה שניות)...',30);
       const resp=await fetch(proxied);
       if(!resp.ok){
+        // The function always answers with JSON {error}. A non-JSON body means
+        // the request never reached it — the platform answered instead — and
+        // that is a completely different fault from "the video couldn't be
+        // fetched". Saying "http 404" for it sent us chasing the wrong bug
+        // once already, so name the two apart.
         let msg='';
         try{ const j=await resp.json(); if(j&&j.error) msg=j.error; }catch(_e){}
-        throw new Error(msg||('http '+resp.status));
+        if(!msg){
+          msg=(resp.status===404)
+            ? 'שרת הביניים לא נמצא (404) — הפונקציה בצד השרת לא עונה. זו תקלה אצלנו, לא בקישור שלכם.'
+            : 'שרת הביניים החזיר תשובה לא צפויה (סטטוס '+resp.status+'). זו תקלה אצלנו, לא בקישור שלכם.';
+        }
+        throw new Error(msg);
       }
       setStatus('שומר את הקובץ...',65);
       const blob=await resp.blob();
