@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>בדיקת יוטיוב — כלי אבחון</title>
+<style>
+  :root{
+    --bg:#eef3f5; --panel:#fff; --panel2:#f4f7f9; --border:#dde5ea;
+    --text:#12222b; --muted:#5d7480; --accent:#0d8f82; --bad:#c93a4d; --warn:#b4791a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    padding:18px 14px 60px;line-height:1.6;}
+  .wrap{max-width:720px;margin:0 auto;}
+  h1{font-size:21px;margin:0 0 4px;}
+  .lede{color:var(--muted);font-size:14px;margin:0 0 16px;}
+  .row{display:flex;gap:8px;margin-bottom:14px;}
+  input[type=text]{flex:1;min-width:0;background:var(--panel);border:1px solid var(--border);
+    color:var(--text);border-radius:10px;padding:12px;font-size:15px;}
+  button{background:linear-gradient(180deg,var(--accent),#0a6f65);color:#fff;border:none;
+    border-radius:10px;padding:12px 18px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;}
+  button:disabled{opacity:.6;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    padding:12px 14px;margin-bottom:10px;}
+  .card h2{font-size:15px;margin:0 0 6px;display:flex;align-items:center;gap:8px;}
+  .tag{font-size:11px;font-weight:800;padding:2px 8px;border-radius:99px;flex-shrink:0;}
+  .ok{background:rgba(13,143,130,.14);color:var(--accent);}
+  .no{background:rgba(201,58,77,.12);color:var(--bad);}
+  .maybe{background:rgba(180,121,26,.14);color:var(--warn);}
+  .card p{margin:4px 0 0;font-size:13px;color:var(--muted);word-break:break-word;}
+  .card code{background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:12px;}
+  .verdict{background:var(--panel);border:2px solid var(--accent);border-radius:12px;
+    padding:14px;margin-top:16px;font-size:15px;display:none;}
+  .verdict.show{display:block;}
+  .verdict b{display:block;font-size:16px;margin-bottom:6px;}
+  .hint{color:var(--muted);font-size:12.5px;margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>בדיקת יוטיוב — כלי אבחון</h1>
+  <p class="lede">
+    העמוד הזה לא חלק מהאתר. הוא בודק אם <b>הדפדפן שלכם</b> יכול להגיע ליוטיוב ישירות —
+    משהו שהשרת שלנו חסום מלעשות. הבדיקה רצה כולה אצלכם; שום דבר לא נשלח לשום מקום.
+  </p>
+
+  <div class="row">
+    <input type="text" id="url" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
+    <button id="go">בדוק</button>
+  </div>
+
+  <div id="out"></div>
+  <div class="verdict" id="verdict"></div>
+
+  <p class="hint">
+    צלמו את המסך ושלחו — התוצאות כאן קובעות אם אפשר לבנות תמיכה ביוטיוב שרצה מהדפדפן.
+  </p>
+</div>
+
+<script>
+(function(){
+  var out=document.getElementById('out');
+  var verdict=document.getElementById('verdict');
+  var goBtn=document.getElementById('go');
+
+  function card(title,state,detail){
+    var tag=state==='ok'?'עובד':state==='no'?'חסום':'חלקי';
+    var d=document.createElement('div');
+    d.className='card';
+    d.innerHTML='<h2><span class="tag '+state+'">'+tag+'</span>'+title+'</h2>'+
+                '<p>'+detail+'</p>';
+    out.appendChild(d);
+    return d;
+  }
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+  function videoId(raw){
+    try{
+      var u=new URL(raw);
+      var h=u.hostname.replace(/^www\./,'').replace(/^m\./,'');
+      if(h==='youtu.be') return u.pathname.split('/').filter(Boolean)[0]||null;
+      var v=u.searchParams.get('v'); if(v) return v;
+      var m=u.pathname.match(/\/(?:shorts|embed|live|v)\/([^/?#]+)/);
+      return m?m[1]:null;
+    }catch(e){ return null; }
+  }
+
+  var CPN='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  function nonce(n){var s='';for(var i=0;i<n;i++)s+=CPN[Math.floor(Math.random()*CPN.length)];return s;}
+
+  var CLIENTS={
+    ANDROID_VR:{num:'28',ver:'1.60.19',ctx:{clientName:'ANDROID_VR',clientVersion:'1.60.19',
+      deviceMake:'Oculus',deviceModel:'Quest 3',androidSdkVersion:32,osName:'Android',osVersion:'12L',platform:'MOBILE'}},
+    WEB:{num:'1',ver:'2.20241203.01.00',ctx:{clientName:'WEB',clientVersion:'2.20241203.01.00',platform:'DESKTOP'}},
+    MWEB:{num:'2',ver:'2.20241202.07.00',ctx:{clientName:'MWEB',clientVersion:'2.20241202.07.00',platform:'MOBILE'}}
+  };
+
+  // Innertube from the browser: the whole question is whether the browser's
+  // own (residential) address gets a different answer than our server's, and
+  // whether CORS lets the page read it at all.
+  function innertube(host,clientKey,id){
+    var c=CLIENTS[clientKey];
+    var body={videoId:id,cpn:nonce(16),contentCheckOk:true,racyCheckOk:true,
+      context:{client:Object.assign({},c.ctx,{hl:'en',gl:'US',utcOffsetMinutes:0}),
+        request:{internalExperimentFlags:[],useSsl:true},user:{lockedSafetyMode:false}}};
+    return fetch('https://'+host+'/youtubei/v1/player?prettyPrint=false',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',
+        'X-YouTube-Client-Name':c.num,'X-YouTube-Client-Version':c.ver},
+      body:JSON.stringify(body)
+    }).then(function(r){
+      return r.text().then(function(t){
+        var j=null; try{ j=JSON.parse(t); }catch(e){}
+        return {http:r.status,json:j,text:t};
+      });
+    });
+  }
+
+  function progressive(j){
+    var f=(j&&j.streamingData&&j.streamingData.formats)||[];
+    return f.filter(function(x){return x.url;});
+  }
+
+  function run(){
+    out.innerHTML=''; verdict.className='verdict'; verdict.innerHTML='';
+    goBtn.disabled=true; goBtn.textContent='בודק...';
+
+    var id=videoId(document.getElementById('url').value.trim());
+    if(!id){
+      card('זיהוי הקישור','no','לא הצלחתי לחלץ מזהה סרטון מהכתובת.');
+      goBtn.disabled=false; goBtn.textContent='בדוק'; return;
+    }
+    card('זיהוי הקישור','ok','מזהה הסרטון: <code>'+esc(id)+'</code>');
+
+    var found=null;
+    var chain=Promise.resolve();
+
+    [['youtubei.googleapis.com','ANDROID_VR'],
+     ['www.youtube.com','ANDROID_VR'],
+     ['www.youtube.com','WEB'],
+     ['www.youtube.com','MWEB']].forEach(function(pair){
+      chain=chain.then(function(){
+        var label='קריאה ל-'+pair[0]+' בתור '+pair[1];
+        return innertube(pair[0],pair[1],id).then(function(res){
+          var st=res.json&&res.json.playabilityStatus&&res.json.playabilityStatus.status;
+          var reason=(res.json&&res.json.playabilityStatus&&res.json.playabilityStatus.reason)||'';
+          var prog=progressive(res.json);
+          if(res.http===200&&st==='OK'&&prog.length){
+            if(!found) found=prog[0];
+            card(label,'ok','התקבלו '+prog.length+' פורמטים ישירים. הדפדפן שלכם <b>לא</b> נחסם.');
+          }else if(res.http===200&&st){
+            card(label,'maybe','יוטיוב ענה, אבל: <code>'+esc(st)+'</code> '+esc(reason.slice(0,90)));
+          }else{
+            card(label,'no','HTTP '+res.http+' '+esc((res.text||'').slice(0,90)));
+          }
+        }).catch(function(e){
+          // A CORS rejection lands here as a TypeError with no status.
+          card(label,'no','הדפדפן חסם את הבקשה (CORS): <code>'+esc((e&&e.message)||e)+'</code>');
+        });
+      });
+    });
+
+    chain=chain.then(function(){
+      if(!found){
+        card('משיכת הסרטון עצמו','no','לא הגענו לשלב הזה — לא התקבלה כתובת וידאו.');
+        return;
+      }
+      // Even with a URL, the page can only use the bytes if the media host
+      // allows a cross-origin read.
+      return fetch(found.url,{headers:{Range:'bytes=0-2047'}}).then(function(r){
+        return r.arrayBuffer().then(function(buf){
+          var b=new Uint8Array(buf);
+          var isMp4=b.length>8&&String.fromCharCode(b[4],b[5],b[6],b[7])==='ftyp';
+          if(r.ok&&isMp4){
+            card('משיכת הסרטון עצמו','ok','ירדו '+b.length+' בייטים והם קובץ וידאו תקין. <b>הדרך פתוחה.</b>');
+          }else{
+            card('משיכת הסרטון עצמו','maybe','HTTP '+r.status+', '+b.length+' בייטים, אבל לא נראה כמו וידאו.');
+          }
+        });
+      }).catch(function(e){
+        card('משיכת הסרטון עצמו','no','הדפדפן חסם את ההורדה (CORS): <code>'+esc((e&&e.message)||e)+'</code>');
+      });
+    });
+
+    chain.then(function(){
+      var cards=out.querySelectorAll('.card');
+      var anyOk=out.querySelectorAll('.tag.ok').length>1; // the id card is always ok
+      var lastOk=cards.length&&cards[cards.length-1].querySelector('.tag.ok');
+      verdict.className='verdict show';
+      if(lastOk){
+        verdict.innerHTML='<b>הדרך פתוחה ✅</b>הדפדפן שלכם הצליח גם לדבר עם יוטיוב וגם למשוך את הסרטון. אפשר לבנות תמיכה ביוטיוב שרצה כולה אצלכם במכשיר.';
+      }else if(anyOk){
+        verdict.innerHTML='<b>חלקית ⚠️</b>יוטיוב ענה לדפדפן, אבל משיכת הקובץ נחסמה. צריך לבדוק כיוון אחר.';
+      }else{
+        verdict.innerHTML='<b>חסום ❌</b>הדפדפן לא הצליח לדבר עם יוטיוב ישירות. הכיוון הזה סגור, ונשארת דרך הקוקיז.';
+      }
+      goBtn.disabled=false; goBtn.textContent='בדוק שוב';
+    });
+  }
+
+  goBtn.onclick=run;
+})();
+</script>
+</body>
+</html>
