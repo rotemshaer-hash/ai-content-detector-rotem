@@ -365,7 +365,7 @@
 
     <div class="hivebox" id="hiveBox">
       <div class="hiveintro">
-        <b>רוצה בדיקה משמעותית מדויקת יותר?</b> אפשר להריץ בדיקה נוספת מול מודל AI אמיתי (Hive) שאומן במיוחד לזיהוי תוכן AI — לעומת אוסף הכללים למעלה. <b>בשונה מכל שאר הניתוח בעמוד הזה, הקובץ הזה כן יישלח לשרת חיצוני</b> (Hive) לצורך הבדיקה. זה לחלוטין אופציונלי.
+        <b>רוצה בדיקה משמעותית מדויקת יותר?</b> אפשר להריץ בדיקה נוספת מול מודל AI אמיתי (Hive) שאומן במיוחד לזיהוי תוכן AI — לעומת אוסף הכללים למעלה. <b>בשונה מכל שאר הניתוח בעמוד הזה, כאן כן נשלח מידע לשרת חיצוני</b> (Hive) לצורך הבדיקה: בתמונה נשלחת התמונה עצמה, <b>ובסרטון נשלחת תמונה בודדת מתוכו</b> (המודל של Hive קורא תמונות, לא סרטונים). לכן בסרטון הבדיקה מתייחסת לרגע אחד ולא לכל הסרטון. זה לחלוטין אופציונלי.
       </div>
       <button type="button" class="hivebtn" id="hiveBtn">בדוק עם AI בענן (Hive)</button>
       <div class="hiveresult" id="hiveResult" style="display:none;"></div>
@@ -514,10 +514,18 @@
     hiveResult.style.display='none';
     hiveResult.innerHTML='';
     try{
+      let payload=currentFile;
+      let payloadType=currentFile.type||'application/octet-stream';
+      if(payloadType.startsWith('video/')){
+        hiveBtn.textContent='מכין תמונה מהסרטון...';
+        payload=await videoFrameAsJpeg(currentFile);
+        payloadType='image/jpeg';
+        hiveBtn.textContent='בודק מול Hive...';
+      }
       const resp=await fetch('/.netlify/functions/hive-detect',{
         method:'POST',
-        headers:{'Content-Type': currentFile.type || 'application/octet-stream'},
-        body: currentFile
+        headers:{'Content-Type': payloadType},
+        body: payload
       });
       // Same trap as the video fetch: this function answers JSON, so a body
       // that won't parse means the request never reached it and the platform
@@ -1104,6 +1112,34 @@
       video.addEventListener('seeked',onSeeked);
       try{video.currentTime=t;}catch(e){resolve();}
     });
+  }
+
+  // Hive's model reads images. A whole video sent to it comes back "There was
+  // an issue processing your file. It may be too large, in an unsupported
+  // format, or corrupted" — measured with a 1.4MB mp4, so not a size problem —
+  // while images have worked since this was wired up. So for a video we send
+  // one representative frame: it is what the model can actually read, it is a
+  // fraction of the bytes, and the panel says so before the button is pressed.
+  async function videoFrameAsJpeg(file){
+    const {video,url}=await loadVideoMeta(file);
+    try{
+      const dur=(isFinite(video.duration)&&video.duration>0)?video.duration:0;
+      // A third of the way in — past intro fades and title cards, and still
+      // representative of the footage rather than of its packaging.
+      if(dur) await seekTo(video, Math.min(dur*0.33, Math.max(dur-0.1,0)));
+      const MAX=1280;
+      const vw=video.videoWidth||640, vh=video.videoHeight||360;
+      const scale=Math.min(1, MAX/Math.max(vw,vh));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(vw*scale));
+      canvas.height=Math.max(1,Math.round(vh*scale));
+      canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.92));
+      if(!blob||!blob.size) throw new Error('לא הצלחתי לחלץ תמונה מהסרטון');
+      return blob;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function detectAudio(video){
