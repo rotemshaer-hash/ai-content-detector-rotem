@@ -132,9 +132,24 @@ export default async (req) => {
     }
 
     if (!hiveResp.ok) {
+      // Hive states why it refused. Reporting only the status number throws
+      // that away and leaves both the user and us guessing at what may be a
+      // perfectly fixable problem — the same mistake as a bare "http 404".
+      let reason = "";
+      if (hiveJson && typeof hiveJson === "object") {
+        for (const key of ["message", "error", "detail", "details", "reason", "status_message"]) {
+          if (typeof hiveJson[key] === "string" && hiveJson[key]) { reason = hiveJson[key]; break; }
+        }
+        if (!reason) reason = JSON.stringify(hiveJson).slice(0, 300);
+      } else {
+        reason = String(hiveText || "").slice(0, 300);
+      }
+
       return new Response(JSON.stringify({
-        error: "Hive החזיר שגיאה (סטטוס " + hiveResp.status + ")",
+        error: "Hive סירב לבדוק את הקובץ (סטטוס " + hiveResp.status + ")" + (reason ? ": " + reason : ""),
         hiveStatus: hiveResp.status,
+        sentContentType: contentType,
+        sentBytes: buf.byteLength,
         hiveRaw: hiveJson || hiveText,
       }), {
         status: 502,

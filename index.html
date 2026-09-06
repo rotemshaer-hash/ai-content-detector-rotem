@@ -539,7 +539,17 @@
         return;
       }
       if(!resp.ok || data.error){
-        hiveResult.innerHTML='<div class="hiveerr">'+escapeHtml(data.error||('שגיאה, סטטוס '+resp.status))+'</div>';
+        // Keep what we actually sent visible next to the refusal. A cloud
+        // service rejecting a file is usually about the file — its type or its
+        // size — and hiding those turns a diagnosable problem into a mystery.
+        let detail='';
+        if(data.sentContentType || data.sentBytes){
+          detail='<div class="hivesub" style="margin-top:8px;">נשלח: '+
+            escapeHtml(data.sentContentType||'לא ידוע')+
+            (data.sentBytes ? ' · '+fmtBytes(data.sentBytes) : '')+'</div>';
+        }
+        hiveResult.innerHTML='<div class="hiveerr">'+
+          escapeHtml(data.error||('שגיאה, סטטוס '+resp.status))+'</div>'+detail;
       } else if(data.summary && data.summary.parsed){
         const s=data.summary;
         const pct=Math.round(s.aiScore*100);
