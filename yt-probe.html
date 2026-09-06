@@ -24,14 +24,16 @@
     border-radius:10px;padding:12px 18px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;}
   button:disabled{opacity:.6;}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;
-    padding:12px 14px;margin-bottom:10px;}
-  .card h2{font-size:15px;margin:0 0 6px;display:flex;align-items:center;gap:8px;}
+    padding:11px 13px;margin-bottom:8px;}
+  .card h2{font-size:14.5px;margin:0;display:flex;align-items:center;gap:8px;}
   .tag{font-size:11px;font-weight:800;padding:2px 8px;border-radius:99px;flex-shrink:0;}
   .ok{background:rgba(13,143,130,.14);color:var(--accent);}
   .no{background:rgba(201,58,77,.12);color:var(--bad);}
   .maybe{background:rgba(180,121,26,.14);color:var(--warn);}
-  .card p{margin:4px 0 0;font-size:13px;color:var(--muted);word-break:break-word;}
-  .card code{background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:12px;}
+  .card p{margin:4px 0 0;font-size:12.5px;color:var(--muted);word-break:break-word;}
+  .card code{background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:11.5px;}
+  .stage{font-size:12px;font-weight:800;color:var(--muted);margin:16px 0 8px;
+    text-transform:none;letter-spacing:0;}
   .verdict{background:var(--panel);border:2px solid var(--accent);border-radius:12px;
     padding:14px;margin-top:16px;font-size:15px;display:none;}
   .verdict.show{display:block;}
@@ -41,10 +43,11 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>בדיקת יוטיוב — כלי אבחון</h1>
+  <h1>בדיקת יוטיוב — סבב 2</h1>
   <p class="lede">
-    העמוד הזה לא חלק מהאתר. הוא בודק אם <b>הדפדפן שלכם</b> יכול להגיע ליוטיוב ישירות —
-    משהו שהשרת שלנו חסום מלעשות. הבדיקה רצה כולה אצלכם; שום דבר לא נשלח לשום מקום.
+    הפנייה הישירה ליוטיוב נחסמה ב-CORS — זה נסגר. הסבב הזה בודק <b>שרתי ביניים ציבוריים</b>
+    (Piped ו-Invidious), פרויקטים חופשיים שנבנו כדי לגשת ליוטיוב ומרשים לדפדפן לקרוא מהם.
+    הכל רץ אצלכם; שום דבר לא נשלח אלינו.
   </p>
 
   <div class="row">
@@ -55,9 +58,7 @@
   <div id="out"></div>
   <div class="verdict" id="verdict"></div>
 
-  <p class="hint">
-    צלמו את המסך ושלחו — התוצאות כאן קובעות אם אפשר לבנות תמיכה ביוטיוב שרצה מהדפדפן.
-  </p>
+  <p class="hint">צלמו ושלחו — גם "הכל חסום" זו תשובה שמכריעה את ההמשך.</p>
 </div>
 
 <script>
@@ -66,17 +67,16 @@
   var verdict=document.getElementById('verdict');
   var goBtn=document.getElementById('go');
 
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function stage(t){var d=document.createElement('div');d.className='stage';d.textContent=t;out.appendChild(d);}
   function card(title,state,detail){
     var tag=state==='ok'?'עובד':state==='no'?'חסום':'חלקי';
     var d=document.createElement('div');
     d.className='card';
-    d.innerHTML='<h2><span class="tag '+state+'">'+tag+'</span>'+title+'</h2>'+
-                '<p>'+detail+'</p>';
+    d.innerHTML='<h2><span class="tag '+state+'">'+tag+'</span>'+esc(title)+'</h2><p>'+detail+'</p>';
     out.appendChild(d);
-    return d;
   }
-  function esc(s){return String(s).replace(/[&<>"']/g,function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
   function videoId(raw){
     try{
@@ -89,40 +89,38 @@
     }catch(e){ return null; }
   }
 
-  var CPN='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-  function nonce(n){var s='';for(var i=0;i<n;i++)s+=CPN[Math.floor(Math.random()*CPN.length)];return s;}
-
-  var CLIENTS={
-    ANDROID_VR:{num:'28',ver:'1.60.19',ctx:{clientName:'ANDROID_VR',clientVersion:'1.60.19',
-      deviceMake:'Oculus',deviceModel:'Quest 3',androidSdkVersion:32,osName:'Android',osVersion:'12L',platform:'MOBILE'}},
-    WEB:{num:'1',ver:'2.20241203.01.00',ctx:{clientName:'WEB',clientVersion:'2.20241203.01.00',platform:'DESKTOP'}},
-    MWEB:{num:'2',ver:'2.20241202.07.00',ctx:{clientName:'MWEB',clientVersion:'2.20241202.07.00',platform:'MOBILE'}}
-  };
-
-  // Innertube from the browser: the whole question is whether the browser's
-  // own (residential) address gets a different answer than our server's, and
-  // whether CORS lets the page read it at all.
-  function innertube(host,clientKey,id){
-    var c=CLIENTS[clientKey];
-    var body={videoId:id,cpn:nonce(16),contentCheckOk:true,racyCheckOk:true,
-      context:{client:Object.assign({},c.ctx,{hl:'en',gl:'US',utcOffsetMinutes:0}),
-        request:{internalExperimentFlags:[],useSsl:true},user:{lockedSafetyMode:false}}};
-    return fetch('https://'+host+'/youtubei/v1/player?prettyPrint=false',{
-      method:'POST',
-      headers:{'Content-Type':'application/json',
-        'X-YouTube-Client-Name':c.num,'X-YouTube-Client-Version':c.ver},
-      body:JSON.stringify(body)
-    }).then(function(r){
-      return r.text().then(function(t){
-        var j=null; try{ j=JSON.parse(t); }catch(e){}
-        return {http:r.status,json:j,text:t};
-      });
+  function withTimeout(promise,ms){
+    return new Promise(function(res,rej){
+      var done=false;
+      var t=setTimeout(function(){ if(!done){done=true;rej(new Error('timeout '+ms+'ms'));} },ms);
+      promise.then(function(v){ if(!done){done=true;clearTimeout(t);res(v);} },
+                   function(e){ if(!done){done=true;clearTimeout(t);rej(e);} });
     });
   }
 
-  function progressive(j){
-    var f=(j&&j.streamingData&&j.streamingData.formats)||[];
-    return f.filter(function(x){return x.url;});
+  // Each source returns {url, label} for a single muxed (video+audio) stream,
+  // which is the only kind usable without stitching tracks together.
+  var SOURCES=[
+    {name:'Piped · kavin.rocks',   api:function(id){return 'https://pipedapi.kavin.rocks/streams/'+id;},      pick:pickPiped},
+    {name:'Piped · adminforge.de', api:function(id){return 'https://pipedapi.adminforge.de/streams/'+id;},    pick:pickPiped},
+    {name:'Piped · private.coffee',api:function(id){return 'https://api.piped.private.coffee/streams/'+id;},  pick:pickPiped},
+    {name:'Invidious · nadeko',    api:function(id){return 'https://inv.nadeko.net/api/v1/videos/'+id;},      pick:pickInv},
+    {name:'Invidious · nerdvpn',   api:function(id){return 'https://invidious.nerdvpn.de/api/v1/videos/'+id;},pick:pickInv},
+    {name:'Invidious · yewtu.be',  api:function(id){return 'https://yewtu.be/api/v1/videos/'+id;},            pick:pickInv}
+  ];
+
+  function pickPiped(j){
+    var s=(j&&j.videoStreams)||[];
+    var muxed=s.filter(function(x){return x.url && x.videoOnly===false;});
+    if(!muxed.length) return null;
+    muxed.sort(function(a,b){return (a.width||9999)-(b.width||9999);});
+    return {url:muxed[0].url, label:(muxed[0].quality||'')+' '+(muxed[0].format||'')};
+  }
+  function pickInv(j){
+    var s=(j&&j.formatStreams)||[];
+    var withUrl=s.filter(function(x){return x.url;});
+    if(!withUrl.length) return null;
+    return {url:withUrl[0].url, label:(withUrl[0].qualityLabel||'')+' '+(withUrl[0].container||'')};
   }
 
   function run(){
@@ -136,67 +134,77 @@
     }
     card('זיהוי הקישור','ok','מזהה הסרטון: <code>'+esc(id)+'</code>');
 
-    var found=null;
+    var found=null, foundFrom='';
     var chain=Promise.resolve();
 
-    [['youtubei.googleapis.com','ANDROID_VR'],
-     ['www.youtube.com','ANDROID_VR'],
-     ['www.youtube.com','WEB'],
-     ['www.youtube.com','MWEB']].forEach(function(pair){
+    stage('שלב 1 — האם הדפדפן מצליח לקבל כתובת וידאו?');
+    SOURCES.forEach(function(src){
       chain=chain.then(function(){
-        var label='קריאה ל-'+pair[0]+' בתור '+pair[1];
-        return innertube(pair[0],pair[1],id).then(function(res){
-          var st=res.json&&res.json.playabilityStatus&&res.json.playabilityStatus.status;
-          var reason=(res.json&&res.json.playabilityStatus&&res.json.playabilityStatus.reason)||'';
-          var prog=progressive(res.json);
-          if(res.http===200&&st==='OK'&&prog.length){
-            if(!found) found=prog[0];
-            card(label,'ok','התקבלו '+prog.length+' פורמטים ישירים. הדפדפן שלכם <b>לא</b> נחסם.');
-          }else if(res.http===200&&st){
-            card(label,'maybe','יוטיוב ענה, אבל: <code>'+esc(st)+'</code> '+esc(reason.slice(0,90)));
-          }else{
-            card(label,'no','HTTP '+res.http+' '+esc((res.text||'').slice(0,90)));
-          }
-        }).catch(function(e){
-          // A CORS rejection lands here as a TypeError with no status.
-          card(label,'no','הדפדפן חסם את הבקשה (CORS): <code>'+esc((e&&e.message)||e)+'</code>');
-        });
+        if(found) return; // first working source is enough
+        return withTimeout(fetch(src.api(id),{headers:{'Accept':'application/json'}}),12000)
+          .then(function(r){
+            return r.text().then(function(t){
+              var j=null; try{ j=JSON.parse(t); }catch(e){}
+              if(!r.ok){ card(src.name,'no','HTTP '+r.status+' '+esc(t.slice(0,70))); return; }
+              var got=j?src.pick(j):null;
+              if(got&&got.url){
+                found=got; foundFrom=src.name;
+                card(src.name,'ok','התקבלה כתובת וידאו ('+esc(got.label.trim()||'לא ידוע')+'). הדפדפן <b>כן</b> הצליח לקרוא מהשרת הזה.');
+              }else{
+                card(src.name,'maybe','השרת ענה, אבל בלי כתובת וידאו שמישה'+(j&&j.error?': '+esc(String(j.error).slice(0,70)):'')+'.');
+              }
+            });
+          })
+          .catch(function(e){
+            card(src.name,'no','לא נגיש מהדפדפן: <code>'+esc((e&&e.message)||e)+'</code>');
+          });
       });
     });
 
     chain=chain.then(function(){
+      stage('שלב 2 — האם אפשר באמת למשוך את בייטים של הסרטון?');
       if(!found){
-        card('משיכת הסרטון עצמו','no','לא הגענו לשלב הזה — לא התקבלה כתובת וידאו.');
+        card('משיכת הקובץ','no','לא הגענו לשלב הזה — אף שרת לא החזיר כתובת.');
         return;
       }
-      // Even with a URL, the page can only use the bytes if the media host
-      // allows a cross-origin read.
-      return fetch(found.url,{headers:{Range:'bytes=0-2047'}}).then(function(r){
-        return r.arrayBuffer().then(function(buf){
-          var b=new Uint8Array(buf);
-          var isMp4=b.length>8&&String.fromCharCode(b[4],b[5],b[6],b[7])==='ftyp';
-          if(r.ok&&isMp4){
-            card('משיכת הסרטון עצמו','ok','ירדו '+b.length+' בייטים והם קובץ וידאו תקין. <b>הדרך פתוחה.</b>');
-          }else{
-            card('משיכת הסרטון עצמו','maybe','HTTP '+r.status+', '+b.length+' בייטים, אבל לא נראה כמו וידאו.');
-          }
+      return withTimeout(fetch(found.url,{headers:{Range:'bytes=0-4095'}}),20000)
+        .then(function(r){
+          return r.arrayBuffer().then(function(buf){
+            var b=new Uint8Array(buf);
+            var sig='';
+            for(var i=4;i<8&&i<b.length;i++) sig+=String.fromCharCode(b[i]);
+            var isMp4=(sig==='ftyp');
+            var isWebm=b.length>4&&b[0]===0x1A&&b[1]===0x45&&b[2]===0xDF&&b[3]===0xA3;
+            if(r.ok&&(isMp4||isWebm)){
+              card('משיכת הקובץ מ-'+foundFrom,'ok',
+                'ירדו '+b.length+' בייטים והם קובץ וידאו תקין ('+(isMp4?'MP4':'WebM')+'). <b>הדרך פתוחה.</b>');
+            }else if(r.ok){
+              card('משיכת הקובץ מ-'+foundFrom,'maybe',
+                'HTTP '+r.status+', ירדו '+b.length+' בייטים אבל הם לא נראים כמו וידאו.');
+            }else{
+              card('משיכת הקובץ מ-'+foundFrom,'no','HTTP '+r.status+'.');
+            }
+          });
+        })
+        .catch(function(e){
+          card('משיכת הקובץ מ-'+foundFrom,'no','הדפדפן חסם את ההורדה: <code>'+esc((e&&e.message)||e)+'</code>');
         });
-      }).catch(function(e){
-        card('משיכת הסרטון עצמו','no','הדפדפן חסם את ההורדה (CORS): <code>'+esc((e&&e.message)||e)+'</code>');
-      });
     });
 
     chain.then(function(){
       var cards=out.querySelectorAll('.card');
-      var anyOk=out.querySelectorAll('.tag.ok').length>1; // the id card is always ok
-      var lastOk=cards.length&&cards[cards.length-1].querySelector('.tag.ok');
+      var last=cards[cards.length-1];
+      var lastOk=last&&last.querySelector('.tag.ok');
       verdict.className='verdict show';
       if(lastOk){
-        verdict.innerHTML='<b>הדרך פתוחה ✅</b>הדפדפן שלכם הצליח גם לדבר עם יוטיוב וגם למשוך את הסרטון. אפשר לבנות תמיכה ביוטיוב שרצה כולה אצלכם במכשיר.';
-      }else if(anyOk){
-        verdict.innerHTML='<b>חלקית ⚠️</b>יוטיוב ענה לדפדפן, אבל משיכת הקובץ נחסמה. צריך לבדוק כיוון אחר.';
+        verdict.innerHTML='<b>הדרך פתוחה ✅</b>הדפדפן שלכם קיבל כתובת וידאו <b>וגם</b> הצליח למשוך אותה. '+
+          'אפשר לבנות תמיכה ביוטיוב שרצה כולה במכשיר — בלי שרת ובלי חשבון.';
+      }else if(found){
+        verdict.innerHTML='<b>חצי הדרך ⚠️</b>קיבלנו כתובת וידאו, אבל הדפדפן לא הצליח למשוך את הקובץ ממנה. '+
+          'צריך לתקוף את הצוואר הזה בלבד.';
       }else{
-        verdict.innerHTML='<b>חסום ❌</b>הדפדפן לא הצליח לדבר עם יוטיוב ישירות. הכיוון הזה סגור, ונשארת דרך הקוקיז.';
+        verdict.innerHTML='<b>חסום ❌</b>אף שרת ביניים לא נגיש מהדפדפן שלכם. '+
+          'הכיוון הזה סגור — נעבור לדרך הקוקיז מחשבון ייעודי.';
       }
       goBtn.disabled=false; goBtn.textContent='בדוק שוב';
     });
