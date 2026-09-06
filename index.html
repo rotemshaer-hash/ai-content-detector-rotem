@@ -665,17 +665,31 @@
   // connection, which is the address YouTube serves happily. Our server is not
   // in this path at all — that is better for privacy than the route TikTok
   // takes, not worse.
+  // Two different families on purpose. Measured on a real phone: of six Piped
+  // instances only private.coffee was even reachable, and YouTube had bot-
+  // blocked that one's address for the video in question ("SignInConfirmNotBot
+  // ... blocked anonymous watch access with this IP"). One relay is not a
+  // feature; the relays get blocked and go down individually, so the answer is
+  // more of them, and Invidious as a second implementation with its own
+  // addresses and its own failure modes.
   const YT_RELAYS=[
-    'https://api.piped.private.coffee',
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.adminforge.de',
-    'https://pipedapi.drgns.space',
-    'https://pipedapi.reallyaweso.me',
-    'https://api.piped.yt'
+    {type:'piped', base:'https://api.piped.private.coffee'},
+    {type:'piped', base:'https://pipedapi.ducks.party'},
+    {type:'piped', base:'https://pipedapi.r4fo.com'},
+    {type:'piped', base:'https://pipedapi.leptons.xyz'},
+    {type:'piped', base:'https://pipedapi.adminforge.de'},
+    {type:'piped', base:'https://pipedapi.kavin.rocks'},
+    {type:'piped', base:'https://pipedapi.drgns.space'},
+    {type:'invidious', base:'https://inv.nadeko.net'},
+    {type:'invidious', base:'https://invidious.nerdvpn.de'},
+    {type:'invidious', base:'https://invidious.privacyredirect.com'},
+    {type:'invidious', base:'https://yewtu.be'},
+    {type:'invidious', base:'https://iv.melmac.space'}
   ];
 
   function relayName(base){
-    try{ return new URL(base).hostname.replace(/^(api|pipedapi)\./,''); }catch(_e){ return base; }
+    try{ return new URL(base).hostname.replace(/^(api|pipedapi|inv|invidious)\./,''); }
+    catch(_e){ return base; }
   }
 
   function safeFileName(raw){
@@ -697,6 +711,22 @@
       .map((x)=>({url:x.url, label:((x.quality||'')+' '+(x.format||'')).trim()}));
   }
 
+  // Invidious: the instance's own streaming endpoint first, because that one is
+  // served by the relay itself. A raw googlevideo URL in the same response is a
+  // different proposition for a browser — it is Google's host answering, and
+  // Google is the party refusing us.
+  function invidiousCandidates(j,id,base){
+    const list=[{url:base+'/latest_version?id='+encodeURIComponent(id)+'&itag=18&local=true',
+                 label:'דרך השרת (360p)'}];
+    const streams=(j&&j.formatStreams)||[];
+    streams.forEach((x)=>{
+      if(x&&x.url&&!/hls|m3u8/i.test(String(x.container||'')+String(x.url))){
+        list.push({url:x.url, label:((x.qualityLabel||'')+' '+(x.container||'')).trim()});
+      }
+    });
+    return list;
+  }
+
   function fetchWithTimeout(url,ms,opts){
     const ctl=(typeof AbortController!=='undefined')?new AbortController():null;
     const t=setTimeout(()=>{ if(ctl) ctl.abort(); },ms);
@@ -714,22 +744,27 @@
     // real reason behind one summary that cost this project most of a day.
     const notes=[];
     for(let i=0;i<YT_RELAYS.length;i++){
-      const base=YT_RELAYS[i];
+      const relay=YT_RELAYS[i];
+      const base=relay.base;
       const who=relayName(base);
-      onStatus('מחפש את הסרטון ('+(i+1)+'/'+YT_RELAYS.length+')...',15+i*5);
+      onStatus('מחפש את הסרטון ('+(i+1)+'/'+YT_RELAYS.length+')...',10+Math.round(i*40/YT_RELAYS.length));
+
+      const metaUrl=(relay.type==='piped')
+        ? base+'/streams/'+encodeURIComponent(videoId)
+        : base+'/api/v1/videos/'+encodeURIComponent(videoId);
 
       let meta=null;
       try{
-        const r=await fetchWithTimeout(base+'/streams/'+encodeURIComponent(videoId),12000,
-          {headers:{'Accept':'application/json'}});
+        const r=await fetchWithTimeout(metaUrl,12000,{headers:{'Accept':'application/json'}});
         const text=await r.text();
         let parsed=null;
         try{ parsed=JSON.parse(text); }catch(_e){}
         if(!r.ok){
-          // Piped states the reason in the body; a bare status number here
-          // would send us guessing again.
-          const why=(parsed&&(parsed.error||parsed.message))||text.slice(0,60);
-          notes.push(who+': '+r.status+(why?' '+why:''));
+          // The relay states the reason in the body — including, usefully, when
+          // YouTube has bot-blocked the relay's own address. A bare status
+          // number would hide exactly the fact that matters.
+          const why=(parsed&&(parsed.error||parsed.message))||text.slice(0,70);
+          notes.push(who+': '+r.status+(why?' '+String(why).split('\n')[0].slice(0,70):''));
           continue;
         }
         meta=parsed;
@@ -739,7 +774,9 @@
         continue;
       }
 
-      const candidates=youtubeStreamCandidates(meta);
+      const candidates=(relay.type==='piped')
+        ? youtubeStreamCandidates(meta)
+        : invidiousCandidates(meta,videoId,base);
       if(!candidates.length){
         notes.push(who+': '+((meta&&meta.error)?String(meta.error).slice(0,50):'בלי עותק שמיש'));
         continue;
@@ -748,11 +785,21 @@
       let lastFail='';
       for(const cand of candidates.slice(0,4)){
         try{
-          onStatus('מוריד את הסרטון דרך '+who+'...',55);
-          const resp=await fetchWithTimeout(cand.url,90000);
-          if(!resp.ok){ lastFail='HTTP '+resp.status; continue; }
+          onStatus('מוריד את הסרטון דרך '+who+'...',60);
+          // Range is not politeness here: the probe that proved this route
+          // works asked for a byte range, and asking for the whole file with no
+          // Range came back empty. Proxies in front of media commonly serve
+          // only ranged requests properly.
+          const resp=await fetchWithTimeout(cand.url,90000,{headers:{Range:'bytes=0-'}});
+          if(!resp.ok&&resp.status!==206){ lastFail='HTTP '+resp.status; continue; }
           const blob=await resp.blob();
-          if(!blob||blob.size<10000){ lastFail='קובץ ריק'; continue; } // an error page dressed as a body
+          // Anything this small is an error page wearing a video's content
+          // type, not a video. Report what it actually was.
+          if(!blob||blob.size<10000){
+            lastFail='קיבלתי '+(blob?blob.size:0)+' בייטים בלבד'+
+              (blob&&blob.type?' ('+blob.type+')':'');
+            continue;
+          }
           return {blob, title:(meta.title||'youtube'), relay:who};
         }catch(e){
           lastFail=(e&&e.name==='AbortError')?'ההורדה נתקעה':'ההורדה נחסמה';
