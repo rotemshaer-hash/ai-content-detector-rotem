@@ -64,8 +64,17 @@ function summarize(hiveJson) {
 
   if (!aiHit) return { parsed: false, allScores: found };
 
-  // other per-generator-model classes Hive returned (e.g. "sora"), for context only
-  const otherClasses = found.filter((f) => f.class !== "ai_generated" && f.class !== "not_ai_generated");
+  // Other classes Hive returns alongside the main pair: per-generator guesses
+  // ("sora", "midjourney") and negative twins ("not_ai_generated_audio"). Only
+  // the generator names are worth surfacing as a hint — the UI presents these
+  // as "a relatively high match to the tool X", and a not_* class shown that
+  // way tells the user the exact opposite of what it means.
+  const otherClasses = found.filter(
+    (f) =>
+      f.class !== "ai_generated" &&
+      f.class !== "not_ai_generated" &&
+      !/^not[_-]/i.test(f.class)
+  );
 
   return {
     parsed: true,

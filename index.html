@@ -563,9 +563,14 @@
         const pct=Math.round(s.aiScore*100);
         let html='<div class="hivescore">Hive: '+pct+'% סבירות שהתוכן נוצר ב-AI</div>'+
           '<div class="hivesub">זהו ניקוד ממודל אמיתי שאומן לזיהוי AI, בנפרד ומדויק יותר מהניקוד ההיוריסטי למעלה.</div>';
+        // Only worth a line if the model actually leaned toward some generator.
+        // A zero-scoring name is noise, and dressing noise up as a "hint" is
+        // how a detector starts sounding more certain than it is.
         if(s.otherClasses && s.otherClasses.length){
           const top=s.otherClasses.slice().sort((a,b)=>b.score-a.score)[0];
-          if(top) html+='<div class="hivesub" style="margin-top:6px;">רמז נוסף מהמודל: התאמה גבוהה יחסית לכלי "'+escapeHtml(top.class)+'" (לא ציון ודאות ישיר, רק אינדיקציה).</div>';
+          if(top && top.score>0.05){
+            html+='<div class="hivesub" style="margin-top:6px;">רמז נוסף מהמודל: התאמה גבוהה יחסית לכלי "'+escapeHtml(top.class)+'" (לא ציון ודאות ישיר, רק אינדיקציה).</div>';
+          }
         }
         hiveResult.innerHTML=html;
       } else {
