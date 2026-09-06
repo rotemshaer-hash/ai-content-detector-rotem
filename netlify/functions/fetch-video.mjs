@@ -330,7 +330,19 @@ async function resolveTikTok(url) {
   if (!r.ok) throw new Error("tikwm http " + r.status);
   const j = await r.json();
   const d = j && j.data;
-  const play = d && (d.hdplay || d.play);
+
+  // The resolver offers several copies of the same video (HD, standard,
+  // watermarked). Taking only the first and giving up when it 502s throws away
+  // two working URLs — they are alternates, not a ranking, and a free service
+  // failing on one says nothing about the others.
+  const candidates = [];
+  for (const key of ["hdplay", "play", "wmplay"]) {
+    const v = d && d[key];
+    if (typeof v === "string" && /^https?:\/\//i.test(v) && !candidates.includes(v)) {
+      candidates.push(v);
+    }
+  }
+  const play = candidates[0];
 
   if (!play) {
     // Second opinion before giving up: the post's own page carries an og:video
@@ -348,6 +360,7 @@ async function resolveTikTok(url) {
 
   return {
     directUrl: play,
+    candidates,
     filename: safeName(d.title, "tiktok") + ".mp4",
     referer: "https://www.tiktok.com/",
   };
@@ -439,12 +452,54 @@ export default async (req) => {
   try {
     const resolved = await resolveVideoUrl(targetUrl);
 
-    const upstream = await safeFetchFollowing(resolved.directUrl, {
-      "User-Agent": resolved.ua || UA,
-      ...(resolved.referer ? { Referer: resolved.referer } : {}),
-    });
-    if (!upstream.ok || !upstream.body) {
-      throw new Error("השרת המקורי סירב לספק את הקובץ (סטטוס " + upstream.status + ")");
+    const candidates = (resolved.candidates && resolved.candidates.length)
+      ? resolved.candidates
+      : [resolved.directUrl];
+
+    let upstream = null;
+    let lastStatus = 0;
+    let lastError = null;
+
+    outer:
+    for (const candidate of candidates) {
+      // A Referer only makes sense to the site it names. Some of these URLs are
+      // served by the resolver's own host rather than the platform, and handing
+      // that host a foreign Referer is at best noise and at worst the reason it
+      // refuses.
+      let sameFamily = false;
+      try {
+        const target = new URL(candidate).hostname.toLowerCase();
+        const refHost = resolved.referer ? new URL(resolved.referer).hostname.toLowerCase() : "";
+        const root = (h) => h.split(".").slice(-2).join(".");
+        sameFamily = !!refHost && root(target) === root(refHost);
+      } catch {}
+
+      const headers = {
+        "User-Agent": resolved.ua || UA,
+        ...(resolved.referer && sameFamily ? { Referer: resolved.referer } : {}),
+      };
+
+      // One retry per candidate: 5xx from these hosts is usually a moment of
+      // load, not a verdict. 4xx is a verdict — move to the next copy.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await safeFetchFollowing(candidate, headers);
+          if (r.ok && r.body) { upstream = r; break outer; }
+          lastStatus = r.status;
+          if (r.status < 500) break;
+        } catch (e) {
+          lastError = e;
+          break;
+        }
+      }
+    }
+
+    if (!upstream) {
+      if (lastError) throw lastError;
+      throw new Error(
+        "השרת המקורי סירב לספק את הקובץ (סטטוס " + lastStatus + ")" +
+        (candidates.length > 1 ? " — ניסיתי " + candidates.length + " גרסאות של הסרטון." : "")
+      );
     }
     return new Response(upstream.body, {
       status: 200,
