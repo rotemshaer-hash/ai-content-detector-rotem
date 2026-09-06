@@ -710,7 +710,17 @@
     try{
       const proxied='/.netlify/functions/fetch-video?url='+encodeURIComponent(url);
       setStatus('מוריד את הסרטון (יכול לקחת כמה שניות)...',30);
-      const resp=await fetch(proxied);
+
+      // A bare 404 here means the page in this browser is older than the
+      // function it is calling — the tab was loaded before the last deploy.
+      // It clears within seconds, so one quiet retry saves the user an error
+      // they can do nothing about and would only have hit by bad timing.
+      let resp=await fetch(proxied);
+      if(resp.status===404){
+        await new Promise(r=>setTimeout(r,1500));
+        resp=await fetch(proxied,{cache:'reload'});
+      }
+
       if(!resp.ok){
         // The function always answers with JSON {error}. A non-JSON body means
         // the request never reached it — the platform answered instead — and
@@ -721,7 +731,7 @@
         try{ const j=await resp.json(); if(j&&j.error) msg=j.error; }catch(_e){}
         if(!msg){
           msg=(resp.status===404)
-            ? 'שרת הביניים לא נמצא (404) — הפונקציה בצד השרת לא עונה. זו תקלה אצלנו, לא בקישור שלכם.'
+            ? 'שרת הביניים לא נמצא (404) — כנראה שהעמוד פתוח מגרסה קודמת. רעננו את הדף ונסו שוב.'
             : 'שרת הביניים החזיר תשובה לא צפויה (סטטוס '+resp.status+'). זו תקלה אצלנו, לא בקישור שלכם.';
         }
         throw new Error(msg);
