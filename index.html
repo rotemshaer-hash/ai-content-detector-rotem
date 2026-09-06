@@ -519,7 +519,25 @@
         headers:{'Content-Type': currentFile.type || 'application/octet-stream'},
         body: currentFile
       });
-      const data=await resp.json();
+      // Same trap as the video fetch: this function answers JSON, so a body
+      // that won't parse means the request never reached it and the platform
+      // replied instead. Calling resp.json() straight away turned that into
+      // "Unexpected token '<'" in the user's face — a JS parser error shown
+      // as if it were a result. Read the text first and say what happened.
+      const raw=await resp.text();
+      let data=null;
+      try{ data=JSON.parse(raw); }catch(_e){}
+      if(!data){
+        hiveResult.innerHTML='<div class="hiveerr">'+escapeHtml(
+          (resp.status===404)
+            ? 'שירות הבדיקה בענן לא נמצא (404) — הפונקציה בצד השרת לא עונה כרגע. זו תקלה אצלנו; נסו שוב בעוד כמה דקות.'
+            : 'שירות הבדיקה בענן החזיר תשובה לא צפויה (סטטוס '+resp.status+'). נסו שוב בעוד כמה דקות.'
+        )+'</div>';
+        hiveResult.style.display='block';
+        hiveBtn.disabled=false;
+        hiveBtn.textContent='בדוק שוב עם AI בענן (Hive)';
+        return;
+      }
       if(!resp.ok || data.error){
         hiveResult.innerHTML='<div class="hiveerr">'+escapeHtml(data.error||('שגיאה, סטטוס '+resp.status))+'</div>';
       } else if(data.summary && data.summary.parsed){
