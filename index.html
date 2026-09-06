@@ -708,37 +708,59 @@
   // that actually yields bytes. One dead relay or one dead URL says nothing
   // about the next — that assumption cost this feature a whole morning.
   async function fetchYouTubeInBrowser(videoId,onStatus){
-    let sawRelay=false;
+    // Every relay's outcome is kept and reported. The first version lumped "the
+    // relay answered with an error" together with "the relay never answered"
+    // and told the user the second — which is the exact habit of hiding the
+    // real reason behind one summary that cost this project most of a day.
+    const notes=[];
     for(let i=0;i<YT_RELAYS.length;i++){
       const base=YT_RELAYS[i];
+      const who=relayName(base);
       onStatus('מחפש את הסרטון ('+(i+1)+'/'+YT_RELAYS.length+')...',15+i*5);
+
       let meta=null;
       try{
         const r=await fetchWithTimeout(base+'/streams/'+encodeURIComponent(videoId),12000,
           {headers:{'Accept':'application/json'}});
-        if(!r.ok) continue;
-        meta=await r.json();
-      }catch(_e){ continue; }
-      if(!meta) continue;
-      sawRelay=true;
+        const text=await r.text();
+        let parsed=null;
+        try{ parsed=JSON.parse(text); }catch(_e){}
+        if(!r.ok){
+          // Piped states the reason in the body; a bare status number here
+          // would send us guessing again.
+          const why=(parsed&&(parsed.error||parsed.message))||text.slice(0,60);
+          notes.push(who+': '+r.status+(why?' '+why:''));
+          continue;
+        }
+        meta=parsed;
+        if(!meta){ notes.push(who+': תשובה לא קריאה'); continue; }
+      }catch(e){
+        notes.push(who+': '+((e&&e.name==='AbortError')?'לא הגיב בזמן':'לא נגיש'));
+        continue;
+      }
 
       const candidates=youtubeStreamCandidates(meta);
+      if(!candidates.length){
+        notes.push(who+': '+((meta&&meta.error)?String(meta.error).slice(0,50):'בלי עותק שמיש'));
+        continue;
+      }
+
+      let lastFail='';
       for(const cand of candidates.slice(0,4)){
         try{
-          onStatus('מוריד את הסרטון דרך '+relayName(base)+'...',55);
+          onStatus('מוריד את הסרטון דרך '+who+'...',55);
           const resp=await fetchWithTimeout(cand.url,90000);
-          if(!resp.ok) continue;
+          if(!resp.ok){ lastFail='HTTP '+resp.status; continue; }
           const blob=await resp.blob();
-          if(!blob||blob.size<10000) continue; // an error page dressed as a body
-          return {blob, title:(meta.title||'youtube'), relay:relayName(base)};
-        }catch(_e){ /* try the next copy */ }
+          if(!blob||blob.size<10000){ lastFail='קובץ ריק'; continue; } // an error page dressed as a body
+          return {blob, title:(meta.title||'youtube'), relay:who};
+        }catch(e){
+          lastFail=(e&&e.name==='AbortError')?'ההורדה נתקעה':'ההורדה נחסמה';
+        }
       }
+      notes.push(who+': '+candidates.length+' עותקים, אף אחד לא ירד'+(lastFail?' ('+lastFail+')':''));
     }
-    const err=new Error(sawRelay
-      ? 'הגעתי לשרתי הביניים אבל אף עותק של הסרטון לא ירד. יתכן שהסרטון מוגבל, או שהשרתים עמוסים כרגע — שווה לנסות שוב בעוד דקה.'
-      : 'לא הצלחתי להגיע לאף שרת ביניים. יתכן שהרשת שלכם חוסמת אותם, או שהם לא זמינים כרגע.');
-    err.relayReached=sawRelay;
-    throw err;
+    throw new Error(notes.join(' · '));
   }
 
   function goToUpload(){
