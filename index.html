@@ -330,7 +330,7 @@
     <div class="urlhint">
       תומך בהדבקת קישור מ<b>טיקטוק וטוויטר/X</b> — הכלי מביא את הסרטון בעצמו דרך שרת ביניים משלנו (כי הפלטפורמות האלה חוסמות גישה ישירה מהדפדפן). באינסטגרם ובפייסבוק זה עובד רק לפוסטים <b>ציבוריים</b> (לא פרטיים ולא דורשי-התחברות). קישור ישיר לקובץ וידאו/תמונה עם CORS פתוח גם יעבוד כרגיל.
       <br><br>
-      <b>יוטיוב לא נתמך.</b> יוטיוב לא מאפשר לשמור סרטון כקובץ במכשיר (גם לא ב-Shorts, וגם לא עם Premium), ולכן אין דרך להעביר אותו לבדיקה. אם אותו סרטון קיים גם בטיקטוק או באינסטגרם — הדביקו את הקישור משם.
+      <b>יוטיוב עובד אחרת:</b> יוטיוב חוסמת שרתים, ולכן סרטון מיוטיוב יורד <b>ישירות מהמכשיר שלכם</b> דרך שרת ציבורי מסוג Piped — האתר שלנו לא נוגע בו בכלל. זה גם פרטי יותר, אבל תלוי בשרתים חופשיים שלפעמים עמוסים; אם זה נכשל, נסו שוב בעוד דקה.
       <br><br>
       <b>לגבי פרטיות:</b> בניגוד להעלאת קובץ (שרצה כולה בדפדפן שלכם), קישור מרשת חברתית עובר דרך שרת הביניים שלנו כדי להוריד אותו — הוא לא נשמר שם ולא נשלח הלאה לשום מקום אחר, אבל זה שונה מהמצב הרגיל של "שום קובץ לא יוצא מהדפדפן". ניתוח ה-AI עצמו עדיין רץ אצלכם בדפדפן, אחרי שהקובץ מגיע.
     </div>
@@ -642,24 +642,123 @@
     }catch(_e){ return false; }
   }
 
+  function youtubeVideoId(raw){
+    try{
+      const u=new URL(raw);
+      const h=u.hostname.replace(/^www\./,'').replace(/^m\./,'');
+      if(h==='youtu.be') return u.pathname.split('/').filter(Boolean)[0]||null;
+      const v=u.searchParams.get('v'); if(v) return v;
+      const m=u.pathname.match(/\/(?:shorts|embed|live|v)\/([^/?#]+)/);
+      return m?m[1]:null;
+    }catch(_e){ return null; }
+  }
+
+  // ---------- YouTube, from the browser ----------
+  // YouTube refuses our server outright, and refuses the page directly too —
+  // measured: every innertube route answers the browser with a CORS rejection,
+  // which no header or client version gets around. What is NOT refused is a
+  // Piped relay: a community-run YouTube front end that does allow a browser
+  // to read from it. Measured on a real phone: private.coffee returned stream
+  // URLs and the browser downloaded a valid MP4 through it.
+  //
+  // So the fetch happens here, on the user's own device and their own
+  // connection, which is the address YouTube serves happily. Our server is not
+  // in this path at all — that is better for privacy than the route TikTok
+  // takes, not worse.
+  const YT_RELAYS=[
+    'https://api.piped.private.coffee',
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.drgns.space',
+    'https://pipedapi.reallyaweso.me',
+    'https://api.piped.yt'
+  ];
+
+  function relayName(base){
+    try{ return new URL(base).hostname.replace(/^(api|pipedapi)\./,''); }catch(_e){ return base; }
+  }
+
+  function safeFileName(raw){
+    let s=String(raw||'youtube').replace(/[\\/:*?"<>|\n\r\t]+/g,' ').replace(/\s+/g,' ').trim();
+    return (s||'youtube').slice(0,80);
+  }
+
+  // Piped lists LBRY copies next to the YouTube ones. They need credentials we
+  // don't have and answer 401 — the probe wasted two requests on them because
+  // it only checked "format", while the word sits in "quality". Check both,
+  // and drop HLS too: a playlist is not a file we can hand to the analyser.
+  function youtubeStreamCandidates(j){
+    const streams=(j&&j.videoStreams)||[];
+    const bad=(s)=>/lbry|hls|m3u8/i.test(String(s||''));
+    return streams
+      .filter((x)=>x && x.url && x.videoOnly===false)
+      .filter((x)=>!bad(x.quality)&&!bad(x.format)&&!bad(x.mimeType)&&!bad(x.url))
+      .sort((a,b)=>(a.width||9999)-(b.width||9999)) // smallest usable: enough to analyse, quickest to fetch
+      .map((x)=>({url:x.url, label:((x.quality||'')+' '+(x.format||'')).trim()}));
+  }
+
+  function fetchWithTimeout(url,ms,opts){
+    const ctl=(typeof AbortController!=='undefined')?new AbortController():null;
+    const t=setTimeout(()=>{ if(ctl) ctl.abort(); },ms);
+    return fetch(url,Object.assign({},opts,ctl?{signal:ctl.signal}:{}))
+      .finally(()=>clearTimeout(t));
+  }
+
+  // Walks the relays, then the copies each one offers, and returns the first
+  // that actually yields bytes. One dead relay or one dead URL says nothing
+  // about the next — that assumption cost this feature a whole morning.
+  async function fetchYouTubeInBrowser(videoId,onStatus){
+    let sawRelay=false;
+    for(let i=0;i<YT_RELAYS.length;i++){
+      const base=YT_RELAYS[i];
+      onStatus('מחפש את הסרטון ('+(i+1)+'/'+YT_RELAYS.length+')...',15+i*5);
+      let meta=null;
+      try{
+        const r=await fetchWithTimeout(base+'/streams/'+encodeURIComponent(videoId),12000,
+          {headers:{'Accept':'application/json'}});
+        if(!r.ok) continue;
+        meta=await r.json();
+      }catch(_e){ continue; }
+      if(!meta) continue;
+      sawRelay=true;
+
+      const candidates=youtubeStreamCandidates(meta);
+      for(const cand of candidates.slice(0,4)){
+        try{
+          onStatus('מוריד את הסרטון דרך '+relayName(base)+'...',55);
+          const resp=await fetchWithTimeout(cand.url,90000);
+          if(!resp.ok) continue;
+          const blob=await resp.blob();
+          if(!blob||blob.size<10000) continue; // an error page dressed as a body
+          return {blob, title:(meta.title||'youtube'), relay:relayName(base)};
+        }catch(_e){ /* try the next copy */ }
+      }
+    }
+    const err=new Error(sawRelay
+      ? 'הגעתי לשרתי הביניים אבל אף עותק של הסרטון לא ירד. יתכן שהסרטון מוגבל, או שהשרתים עמוסים כרגע — שווה לנסות שוב בעוד דקה.'
+      : 'לא הצלחתי להגיע לאף שרת ביניים. יתכן שהרשת שלכם חוסמת אותם, או שהם לא זמינים כרגע.');
+    err.relayReached=sawRelay;
+    throw err;
+  }
+
   function goToUpload(){
     tabUpload.click();
     errbox.style.display='none';
     dropzone.scrollIntoView({behavior:'smooth',block:'center'});
   }
 
-  // YouTube gets its own notice rather than the generic "save it and come
-  // back": on Shorts there is no save-to-device button at all (the bookmark
-  // is a playlist, and even a Premium download stays locked inside the app),
-  // so telling people to save the file sends them somewhere that doesn't
-  // exist. These two are what actually remain.
-  function showYouTubeNotice(){
+  // Shown only when the browser route above actually fails. YouTube itself
+  // offers no save-to-device — not on Shorts, not with Premium — so the old
+  // "save it and come back" advice pointed at a button that does not exist.
+  // These two are what genuinely remain when the relays are down.
+  function showYouTubeNotice(reason){
     showError(
-      '<b>יוטיוב לא מאפשר לשמור סרטונים כקובץ במכשיר</b> — גם לא ב-Shorts, וגם לא עם מנוי Premium '+
-      '(ההורדה שם נשארת נעולה בתוך האפליקציה). לכן אי אפשר לבדוק סרטון מיוטיוב אוטומטית.<br><br>'+
-      '<b>שתי דרכים שכן עובדות:</b>'+
+      '<b>לא הצלחתי להביא את הסרטון מיוטיוב הפעם.</b><br><br>'+
+      (reason ? ('<b>סיבה:</b> '+escapeHtml(reason)+'<br><br>') : '')+
+      'שווה לנסות שוב בעוד דקה — הבדיקה עוברת דרך שרתים ציבוריים שלפעמים עמוסים. '+
+      'ואם זה ממשיך, שתי דרכים שעובדות:'+
       '<div class="rescue">'+
-        '<div class="step go"><span class="num">1</span><span>מצאתם את אותו סרטון בטיקטוק / אינסטגרם / X? הדביקו את הקישור משם — הבדיקה תרוץ במלואה</span></div>'+
+        '<div class="step go"><span class="num">1</span><span>מצאתם את אותו סרטון בטיקטוק / אינסטגרם / X? הדביקו את הקישור משם</span></div>'+
         '<button type="button" class="step back" id="goUpload">'+
           '<span class="num">2</span><span>או: הקליטו את המסך בזמן שהסרטון מתנגן, והעלו את ההקלטה</span>'+
         '</button>'+
@@ -718,14 +817,38 @@
     results.classList.remove('show');
     dlBar.classList.remove('show');
 
-    // YouTube refuses server-side downloads for the overwhelming majority of
-    // videos — measured against the live API, 1 of 11 real videos resolved.
-    // Spinning for a couple of seconds before failing 9 times out of 10 is
-    // worse than being straight about it, so YouTube links go directly to the
-    // path that always works. (The server still knows how to fetch YouTube;
-    // it just isn't worth sending people through a coin flip to reach it.)
+    // YouTube does not go through our server: it refuses that address (1 of 11
+    // real videos resolved) and refuses the page's direct calls too. It does
+    // not refuse a Piped relay reached from the user's own connection, so
+    // that is where this runs — in the browser, start to finish.
     if(isYouTubeLink(url)){
-      showYouTubeNotice();
+      const videoId=youtubeVideoId(url);
+      if(!videoId){
+        showYouTubeNotice('לא הצלחתי לזהות מזהה סרטון בקישור הזה.');
+        return;
+      }
+      setStatus('מתחבר...',10);
+      try{
+        const got=await fetchYouTubeInBrowser(videoId,setStatus);
+        setStatus('שומר את הקובץ...',70);
+        const name=safeFileName(got.title)+'.mp4';
+        const file=new File([got.blob],name,{type:got.blob.type||'video/mp4'});
+        filepill.style.display='flex';
+        filenameEl.textContent=file.name;
+        filesizeEl.textContent=fmtBytes(file.size);
+        offerDownload(file);
+        try{
+          await startAnalysis(file);
+        }catch(analysisErr){
+          showError(
+            '<b>הסרטון הורד בהצלחה, אבל הניתוח נכשל.</b><br><br>'+
+            (analysisErr&&analysisErr.message ? ('<b>סיבה:</b> '+escapeHtml(analysisErr.message)+'<br><br>') : '')+
+            'הקובץ שמור אצלכם בכפתור ההורדה למעלה — נסו להעלות אותו דרך לשונית "העלאת קובץ".'
+          );
+        }
+      }catch(err){
+        showYouTubeNotice(err&&err.message);
+      }
       return;
     }
 
