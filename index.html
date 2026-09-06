@@ -672,19 +672,31 @@
   // feature; the relays get blocked and go down individually, so the answer is
   // more of them, and Invidious as a second implementation with its own
   // addresses and its own failure modes.
+  // Every Piped API host listed in the project's own documentation, checked
+  // against that document rather than remembered. The two observed reachable
+  // from a real phone lead, since the directory's order says nothing about who
+  // will answer. Invidious sits last as a long shot: on that phone every
+  // Invidious host was unreachable, which fits — it does not send CORS headers
+  // by default, so a browser cannot read it however healthy the server is.
   const YT_RELAYS=[
     {type:'piped', base:'https://api.piped.private.coffee'},
     {type:'piped', base:'https://pipedapi.ducks.party'},
-    {type:'piped', base:'https://pipedapi.r4fo.com'},
+    {type:'piped', base:'https://pipedapi.kavin.rocks'},
+    {type:'piped', base:'https://pipedapi-libre.kavin.rocks'},
     {type:'piped', base:'https://pipedapi.leptons.xyz'},
     {type:'piped', base:'https://pipedapi.adminforge.de'},
-    {type:'piped', base:'https://pipedapi.kavin.rocks'},
     {type:'piped', base:'https://pipedapi.drgns.space'},
+    {type:'piped', base:'https://pipedapi.owo.si'},
+    {type:'piped', base:'https://pipedapi.nosebs.ru'},
+    {type:'piped', base:'https://pipedapi.reallyaweso.me'},
+    {type:'piped', base:'https://pipedapi.darkness.services'},
+    {type:'piped', base:'https://pipedapi.orangenet.cc'},
+    {type:'piped', base:'https://piped-api.codespace.cz'},
+    {type:'piped', base:'https://piped-api.privacy.com.de'},
+    {type:'piped', base:'https://api.piped.yt'},
     {type:'invidious', base:'https://inv.nadeko.net'},
     {type:'invidious', base:'https://invidious.nerdvpn.de'},
-    {type:'invidious', base:'https://invidious.privacyredirect.com'},
-    {type:'invidious', base:'https://yewtu.be'},
-    {type:'invidious', base:'https://iv.melmac.space'}
+    {type:'invidious', base:'https://yewtu.be'}
   ];
 
   function relayName(base){

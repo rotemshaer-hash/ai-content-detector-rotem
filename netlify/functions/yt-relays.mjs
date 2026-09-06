@@ -26,12 +26,22 @@ const SOURCES = [
 // Kept as a floor, not as the answer: if every source is unreachable the
 // browser still gets something to try rather than an empty list.
 const FALLBACK = [
+  // The two observed answering from a real browser lead the list.
   "https://api.piped.private.coffee",
   "https://pipedapi.ducks.party",
-  "https://pipedapi.r4fo.com",
-  "https://pipedapi.smnz.de",
-  "https://pipedapi.adminforge.de",
   "https://pipedapi.kavin.rocks",
+  "https://pipedapi-libre.kavin.rocks",
+  "https://pipedapi.leptons.xyz",
+  "https://pipedapi.adminforge.de",
+  "https://pipedapi.drgns.space",
+  "https://pipedapi.owo.si",
+  "https://pipedapi.nosebs.ru",
+  "https://pipedapi.reallyaweso.me",
+  "https://pipedapi.darkness.services",
+  "https://pipedapi.orangenet.cc",
+  "https://piped-api.codespace.cz",
+  "https://piped-api.privacy.com.de",
+  "https://api.piped.yt",
 ];
 
 function parseInstancesJson(text) {
@@ -40,15 +50,22 @@ function parseInstancesJson(text) {
   return data.map((x) => x && (x.api_url || x.apiUrl)).filter(Boolean);
 }
 
-// The docs page is a markdown table whose second column is the API URL.
+// The docs page is a markdown table, but written without leading pipes:
+//   kavin.rocks (Official) | https://pipedapi.kavin.rocks | 🇺🇸 | Yes | ...
+// An earlier version required lines to start with "|" and so parsed nothing at
+// all, which is why the "live" list silently added zero hosts. Checked against
+// the real document rather than an assumption about its shape.
 function parseInstancesMarkdown(text) {
   const out = [];
   for (const line of text.split("\n")) {
-    if (!line.startsWith("|")) continue;
-    const cells = line.split("|").map((c) => c.trim());
-    for (const cell of cells) {
-      const m = cell.match(/https:\/\/[^\s|)\]]+/);
-      if (m && /api|pipedapi/i.test(m[0])) out.push(m[0]);
+    if (line.indexOf("|") < 0) continue;
+    for (const cell of line.split("|")) {
+      const m = cell.trim().match(/^https:\/\/[^\s|)\]]+$/);
+      // The same page also links piped.video, GitHub and mirrors; only the API
+      // hosts belong here, and they all carry "api" in the hostname.
+      if (m && /(^|\.)(pipedapi|piped-api|api)[.-]/i.test(new URL(m[0]).hostname)) {
+        out.push(m[0]);
+      }
     }
   }
   return out;
