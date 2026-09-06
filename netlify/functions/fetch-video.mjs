@@ -363,6 +363,9 @@ async function resolveTikTok(url) {
     candidates,
     filename: safeName(d.title, "tiktok") + ".mp4",
     referer: "https://www.tiktok.com/",
+    // Used only if every copy above refuses to serve: read the file straight
+    // off the post's own page instead of through the resolver.
+    fallback: () => resolveByOgVideo(canonical, "טיקטוק", "https://www.tiktok.com/"),
   };
 }
 
@@ -452,54 +455,78 @@ export default async (req) => {
   try {
     const resolved = await resolveVideoUrl(targetUrl);
 
-    const candidates = (resolved.candidates && resolved.candidates.length)
-      ? resolved.candidates
-      : [resolved.directUrl];
+    const attempt = { status: 0, error: null, tried: 0 };
 
-    let upstream = null;
-    let lastStatus = 0;
-    let lastError = null;
+    // Walks the copies of one video and returns the first that actually streams.
+    async function firstWorking(urls, source) {
+      for (const candidate of urls) {
+        if (!candidate) continue;
+        attempt.tried++;
 
-    outer:
-    for (const candidate of candidates) {
-      // A Referer only makes sense to the site it names. Some of these URLs are
-      // served by the resolver's own host rather than the platform, and handing
-      // that host a foreign Referer is at best noise and at worst the reason it
-      // refuses.
-      let sameFamily = false;
-      try {
-        const target = new URL(candidate).hostname.toLowerCase();
-        const refHost = resolved.referer ? new URL(resolved.referer).hostname.toLowerCase() : "";
-        const root = (h) => h.split(".").slice(-2).join(".");
-        sameFamily = !!refHost && root(target) === root(refHost);
-      } catch {}
-
-      const headers = {
-        "User-Agent": resolved.ua || UA,
-        ...(resolved.referer && sameFamily ? { Referer: resolved.referer } : {}),
-      };
-
-      // One retry per candidate: 5xx from these hosts is usually a moment of
-      // load, not a verdict. 4xx is a verdict — move to the next copy.
-      for (let attempt = 0; attempt < 2; attempt++) {
+        // A Referer only makes sense to the site it names. Some of these URLs
+        // are served by a resolver's own host rather than the platform, and
+        // handing that host a foreign Referer is at best noise and at worst the
+        // reason it refuses.
+        let sameFamily = false;
         try {
-          const r = await safeFetchFollowing(candidate, headers);
-          if (r.ok && r.body) { upstream = r; break outer; }
-          lastStatus = r.status;
-          if (r.status < 500) break;
-        } catch (e) {
-          lastError = e;
-          break;
+          const target = new URL(candidate).hostname.toLowerCase();
+          const refHost = source.referer ? new URL(source.referer).hostname.toLowerCase() : "";
+          const root = (h) => h.split(".").slice(-2).join(".");
+          sameFamily = !!refHost && root(target) === root(refHost);
+        } catch {}
+
+        const headers = {
+          "User-Agent": source.ua || UA,
+          ...(source.referer && sameFamily ? { Referer: source.referer } : {}),
+        };
+
+        // One retry per copy: 5xx is usually a moment of load, not a verdict.
+        // 4xx is a verdict — move on.
+        for (let i = 0; i < 2; i++) {
+          try {
+            const r = await safeFetchFollowing(candidate, headers);
+            if (r.ok && r.body) return r;
+            attempt.status = r.status;
+            if (r.status < 500) break;
+          } catch (e) {
+            attempt.error = e;
+            break;
+          }
         }
+      }
+      return null;
+    }
+
+    const listOf = (r) => (r.candidates && r.candidates.length ? r.candidates : [r.directUrl]);
+
+    let upstream = await firstWorking(listOf(resolved), resolved);
+
+    // A third-party resolver handing back a URL that then refuses to serve is
+    // its failure, not the video's — and the platform's own page is a separate
+    // source for the same file. Previously that fallback only ran when the
+    // resolver found nothing at all, so a dead URL ended the attempt with a
+    // perfectly downloadable video one step away.
+    if (!upstream && typeof resolved.fallback === "function") {
+      try {
+        const alt = await resolved.fallback();
+        if (alt) upstream = await firstWorking(listOf(alt), alt);
+        if (upstream) resolved.filename = alt.filename || resolved.filename;
+      } catch (e) {
+        if (!attempt.error) attempt.error = e;
       }
     }
 
     if (!upstream) {
-      if (lastError) throw lastError;
-      throw new Error(
-        "השרת המקורי סירב לספק את הקובץ (סטטוס " + lastStatus + ")" +
-        (candidates.length > 1 ? " — ניסיתי " + candidates.length + " גרסאות של הסרטון." : "")
-      );
+      // A real HTTP refusal is the more useful thing to report, so it wins over
+      // whatever the last source happened to throw on its way out.
+      if (attempt.status) {
+        throw new Error(
+          "השרת המקורי סירב לספק את הקובץ (סטטוס " + attempt.status + ")" +
+          (attempt.tried > 1 ? " — ניסיתי " + attempt.tried + " מקורות שונים לאותו סרטון." : "")
+        );
+      }
+      if (attempt.error) throw attempt.error;
+      throw new Error("לא הצלחתי להוריד את הקובץ מאף אחד מהמקורות.");
     }
     return new Response(upstream.body, {
       status: 200,
