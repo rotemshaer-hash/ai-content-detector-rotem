@@ -101,26 +101,45 @@
   // Each source returns {url, label} for a single muxed (video+audio) stream,
   // which is the only kind usable without stitching tracks together.
   var SOURCES=[
+    {name:'Piped · private.coffee',api:function(id){return 'https://api.piped.private.coffee/streams/'+id;},  pick:pickPiped},
     {name:'Piped · kavin.rocks',   api:function(id){return 'https://pipedapi.kavin.rocks/streams/'+id;},      pick:pickPiped},
     {name:'Piped · adminforge.de', api:function(id){return 'https://pipedapi.adminforge.de/streams/'+id;},    pick:pickPiped},
-    {name:'Piped · private.coffee',api:function(id){return 'https://api.piped.private.coffee/streams/'+id;},  pick:pickPiped},
-    {name:'Invidious · nadeko',    api:function(id){return 'https://inv.nadeko.net/api/v1/videos/'+id;},      pick:pickInv},
-    {name:'Invidious · nerdvpn',   api:function(id){return 'https://invidious.nerdvpn.de/api/v1/videos/'+id;},pick:pickInv},
-    {name:'Invidious · yewtu.be',  api:function(id){return 'https://yewtu.be/api/v1/videos/'+id;},            pick:pickInv}
+    {name:'Invidious · nadeko',    api:function(id){return 'https://inv.nadeko.net/api/v1/videos/'+id;},      pick:pickInv, host:'inv.nadeko.net'},
+    {name:'Invidious · nerdvpn',   api:function(id){return 'https://invidious.nerdvpn.de/api/v1/videos/'+id;},pick:pickInv, host:'invidious.nerdvpn.de'},
+    {name:'Invidious · yewtu.be',  api:function(id){return 'https://yewtu.be/api/v1/videos/'+id;},            pick:pickInv, host:'yewtu.be'}
   ];
+
+  // LBRY is a different network Piped also indexes, and its URLs need
+  // credentials we do not have — round 2 picked one by accident (smallest
+  // first) and got a 401 that looked like a wall but was a wrong turn.
+  function isUsable(url,format){
+    if(!url) return false;
+    var f=String(format||'').toUpperCase();
+    if(f.indexOf('LBRY')>=0) return false;
+    if(String(url).toLowerCase().indexOf('lbry')>=0) return false;
+    return /^https?:\/\//i.test(url);
+  }
 
   function pickPiped(j){
     var s=(j&&j.videoStreams)||[];
-    var muxed=s.filter(function(x){return x.url && x.videoOnly===false;});
-    if(!muxed.length) return null;
+    var muxed=s.filter(function(x){return x.videoOnly===false && isUsable(x.url,x.format);});
     muxed.sort(function(a,b){return (a.width||9999)-(b.width||9999);});
-    return {url:muxed[0].url, label:(muxed[0].quality||'')+' '+(muxed[0].format||'')};
+    return muxed.map(function(x){
+      return {url:x.url, label:((x.quality||'')+' '+(x.format||'')).trim()};
+    });
   }
-  function pickInv(j){
+  function pickInv(j,id,host){
+    var list=[];
+    // The instance's own proxy endpoint, which is the CORS-friendly one —
+    // a raw googlevideo URL handed to a page is a different question entirely.
+    if(host) list.push({url:'https://'+host+'/latest_version?id='+encodeURIComponent(id)+'&itag=18&local=true',
+                        label:'דרך שרת הביניים (itag 18)'});
     var s=(j&&j.formatStreams)||[];
-    var withUrl=s.filter(function(x){return x.url;});
-    if(!withUrl.length) return null;
-    return {url:withUrl[0].url, label:(withUrl[0].qualityLabel||'')+' '+(withUrl[0].container||'')};
+    s.forEach(function(x){
+      if(isUsable(x.url,x.container)) list.push({url:x.url,
+        label:((x.qualityLabel||'')+' '+(x.container||'')).trim()});
+    });
+    return list;
   }
 
   function run(){
@@ -134,24 +153,26 @@
     }
     card('זיהוי הקישור','ok','מזהה הסרטון: <code>'+esc(id)+'</code>');
 
-    var found=null, foundFrom='';
+    // Round 2 stopped at the first URL it found and reported its failure as the
+    // whole avenue's. Collect from every reachable relay instead, then try them
+    // in turn — one dead URL says nothing about the next.
+    var candidates=[];
     var chain=Promise.resolve();
 
-    stage('שלב 1 — האם הדפדפן מצליח לקבל כתובת וידאו?');
+    stage('שלב 1 — אילו שרתי ביניים נגישים מהדפדפן?');
     SOURCES.forEach(function(src){
       chain=chain.then(function(){
-        if(found) return; // first working source is enough
         return withTimeout(fetch(src.api(id),{headers:{'Accept':'application/json'}}),12000)
           .then(function(r){
             return r.text().then(function(t){
               var j=null; try{ j=JSON.parse(t); }catch(e){}
               if(!r.ok){ card(src.name,'no','HTTP '+r.status+' '+esc(t.slice(0,70))); return; }
-              var got=j?src.pick(j):null;
-              if(got&&got.url){
-                found=got; foundFrom=src.name;
-                card(src.name,'ok','התקבלה כתובת וידאו ('+esc(got.label.trim()||'לא ידוע')+'). הדפדפן <b>כן</b> הצליח לקרוא מהשרת הזה.');
+              var list=j?(src.pick(j,id,src.host)||[]):[];
+              list.forEach(function(x){ candidates.push({url:x.url,label:x.label,from:src.name}); });
+              if(list.length){
+                card(src.name,'ok','נגיש, ו-'+list.length+' כתובות וידאו שמישות ממנו.');
               }else{
-                card(src.name,'maybe','השרת ענה, אבל בלי כתובת וידאו שמישה'+(j&&j.error?': '+esc(String(j.error).slice(0,70)):'')+'.');
+                card(src.name,'maybe','נגיש, אבל בלי כתובת וידאו שמישה'+(j&&j.error?': '+esc(String(j.error).slice(0,60)):'')+'.');
               }
             });
           })
@@ -161,49 +182,55 @@
       });
     });
 
+    var winner=null;
     chain=chain.then(function(){
-      stage('שלב 2 — האם אפשר באמת למשוך את בייטים של הסרטון?');
-      if(!found){
-        card('משיכת הקובץ','no','לא הגענו לשלב הזה — אף שרת לא החזיר כתובת.');
+      stage('שלב 2 — האם אחת מהן באמת מורידה וידאו?');
+      if(!candidates.length){
+        card('משיכת הקובץ','no','לא הגענו לשלב הזה — אף שרת לא החזיר כתובת שמישה.');
         return;
       }
-      return withTimeout(fetch(found.url,{headers:{Range:'bytes=0-4095'}}),20000)
-        .then(function(r){
-          return r.arrayBuffer().then(function(buf){
-            var b=new Uint8Array(buf);
-            var sig='';
-            for(var i=4;i<8&&i<b.length;i++) sig+=String.fromCharCode(b[i]);
-            var isMp4=(sig==='ftyp');
-            var isWebm=b.length>4&&b[0]===0x1A&&b[1]===0x45&&b[2]===0xDF&&b[3]===0xA3;
-            if(r.ok&&(isMp4||isWebm)){
-              card('משיכת הקובץ מ-'+foundFrom,'ok',
-                'ירדו '+b.length+' בייטים והם קובץ וידאו תקין ('+(isMp4?'MP4':'WebM')+'). <b>הדרך פתוחה.</b>');
-            }else if(r.ok){
-              card('משיכת הקובץ מ-'+foundFrom,'maybe',
-                'HTTP '+r.status+', ירדו '+b.length+' בייטים אבל הם לא נראים כמו וידאו.');
-            }else{
-              card('משיכת הקובץ מ-'+foundFrom,'no','HTTP '+r.status+'.');
-            }
-          });
-        })
-        .catch(function(e){
-          card('משיכת הקובץ מ-'+foundFrom,'no','הדפדפן חסם את ההורדה: <code>'+esc((e&&e.message)||e)+'</code>');
+      var tries=candidates.slice(0,6);
+      var seq=Promise.resolve();
+      tries.forEach(function(cand){
+        seq=seq.then(function(){
+          if(winner) return;
+          return withTimeout(fetch(cand.url,{headers:{Range:'bytes=0-4095'}}),20000)
+            .then(function(r){
+              return r.arrayBuffer().then(function(buf){
+                var b=new Uint8Array(buf);
+                var sig='';
+                for(var i=4;i<8&&i<b.length;i++) sig+=String.fromCharCode(b[i]);
+                var isMp4=(sig==='ftyp');
+                var isWebm=b.length>4&&b[0]===0x1A&&b[1]===0x45&&b[2]===0xDF&&b[3]===0xA3;
+                var name=cand.from+' — '+(cand.label||'וידאו');
+                if(r.ok&&(isMp4||isWebm)){
+                  winner=cand;
+                  card(name,'ok','ירדו '+b.length+' בייטים והם קובץ וידאו תקין ('+(isMp4?'MP4':'WebM')+'). <b>זה עובד.</b>');
+                }else if(r.ok){
+                  card(name,'maybe','HTTP '+r.status+', '+b.length+' בייטים — אבל לא נראה כמו וידאו.');
+                }else{
+                  card(name,'no','HTTP '+r.status+'.');
+                }
+              });
+            })
+            .catch(function(e){
+              card(cand.from+' — '+(cand.label||'וידאו'),'no','נחסם: <code>'+esc((e&&e.message)||e)+'</code>');
+            });
         });
+      });
+      return seq;
     });
 
     chain.then(function(){
-      var cards=out.querySelectorAll('.card');
-      var last=cards[cards.length-1];
-      var lastOk=last&&last.querySelector('.tag.ok');
       verdict.className='verdict show';
-      if(lastOk){
-        verdict.innerHTML='<b>הדרך פתוחה ✅</b>הדפדפן שלכם קיבל כתובת וידאו <b>וגם</b> הצליח למשוך אותה. '+
-          'אפשר לבנות תמיכה ביוטיוב שרצה כולה במכשיר — בלי שרת ובלי חשבון.';
-      }else if(found){
-        verdict.innerHTML='<b>חצי הדרך ⚠️</b>קיבלנו כתובת וידאו, אבל הדפדפן לא הצליח למשוך את הקובץ ממנה. '+
-          'צריך לתקוף את הצוואר הזה בלבד.';
+      if(winner){
+        verdict.innerHTML='<b>הדרך פתוחה ✅</b>הדפדפן שלכם הוריד וידאו אמיתי דרך <b>'+esc(winner.from)+'</b>. '+
+          'אפשר לבנות תמיכה ביוטיוב שרצה כולה במכשיר — בלי שרת שלנו, בלי חשבון ובלי תחזוקה.';
+      }else if(candidates.length){
+        verdict.innerHTML='<b>חצי הדרך ⚠️</b>קיבלנו '+candidates.length+' כתובות וידאו, אבל אף אחת מהן לא נמשכה. '+
+          'הצוואר הוא ההורדה עצמה, לא הגישה לשרתים.';
       }else{
-        verdict.innerHTML='<b>חסום ❌</b>אף שרת ביניים לא נגיש מהדפדפן שלכם. '+
+        verdict.innerHTML='<b>חסום ❌</b>אף שרת ביניים לא החזיר כתובת שמישה. '+
           'הכיוון הזה סגור — נעבור לדרך הקוקיז מחשבון ייעודי.';
       }
       goBtn.disabled=false; goBtn.textContent='בדוק שוב';
