@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>בדיקת יוטיוב — כלי אבחון</title>
+<title>סריקת שרתים — כלי אבחון</title>
 <style>
   :root{
     --bg:#eef3f5; --panel:#fff; --panel2:#f4f7f9; --border:#dde5ea;
@@ -23,60 +23,54 @@
   button{background:linear-gradient(180deg,var(--accent),#0a6f65);color:#fff;border:none;
     border-radius:10px;padding:12px 18px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;}
   button:disabled{opacity:.6;}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;
-    padding:11px 13px;margin-bottom:8px;}
-  .card h2{font-size:14.5px;margin:0;display:flex;align-items:center;gap:8px;}
-  .tag{font-size:11px;font-weight:800;padding:2px 8px;border-radius:99px;flex-shrink:0;}
+  .summary{background:var(--panel);border:2px solid var(--accent);border-radius:12px;
+    padding:12px 14px;margin-bottom:12px;font-size:15px;display:none;}
+  .summary.show{display:block;}
+  .summary b{font-size:16px;}
+  .list{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border);
+    font-size:13.5px;}
+  .item:last-child{border-bottom:none;}
+  .tag{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:99px;flex-shrink:0;min-width:52px;text-align:center;}
   .ok{background:rgba(13,143,130,.14);color:var(--accent);}
-  .no{background:rgba(201,58,77,.12);color:var(--bad);}
+  .no{background:rgba(201,58,77,.10);color:var(--bad);}
   .maybe{background:rgba(180,121,26,.14);color:var(--warn);}
-  .card p{margin:4px 0 0;font-size:12.5px;color:var(--muted);word-break:break-word;}
-  .card code{background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:11.5px;}
-  .stage{font-size:12px;font-weight:800;color:var(--muted);margin:16px 0 8px;
-    text-transform:none;letter-spacing:0;}
-  .verdict{background:var(--panel);border:2px solid var(--accent);border-radius:12px;
-    padding:14px;margin-top:16px;font-size:15px;display:none;}
-  .verdict.show{display:block;}
-  .verdict b{display:block;font-size:16px;margin-bottom:6px;}
+  .who{font-weight:700;}
+  .why{color:var(--muted);font-size:12px;}
+  .stage{font-size:12.5px;font-weight:800;color:var(--muted);margin:16px 0 8px;}
   .hint{color:var(--muted);font-size:12.5px;margin-top:14px;}
+  .copybox{width:100%;margin-top:10px;background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:8px;font-size:11.5px;color:var(--muted);min-height:60px;font-family:monospace;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>בדיקת יוטיוב — סבב 2</h1>
+  <h1>סריקת שרתים</h1>
   <p class="lede">
-    הפנייה הישירה ליוטיוב נחסמה ב-CORS — זה נסגר. הסבב הזה בודק <b>שרתי ביניים ציבוריים</b>
-    (Piped ו-Invidious), פרויקטים חופשיים שנבנו כדי לגשת ליוטיוב ומרשים לדפדפן לקרוא מהם.
-    הכל רץ אצלכם; שום דבר לא נשלח אלינו.
+    יוטיוב כבר עובד — אבל מתוך 12 שרתים רק 2 נגישים מהרשת שלכם, ושניהם נחסמו.
+    הסריקה הזו בודקת <b>רשימה גדולה</b> ומוצאת אילו שרתים באמת פתוחים אצלכם,
+    כדי שנכניס אותם לאפליקציה. הכל רץ אצלכם.
   </p>
 
   <div class="row">
     <input type="text" id="url" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
-    <button id="go">בדוק</button>
+    <button id="go">סרוק</button>
   </div>
 
+  <div class="summary" id="summary"></div>
   <div id="out"></div>
-  <div class="verdict" id="verdict"></div>
 
-  <p class="hint">צלמו ושלחו — גם "הכל חסום" זו תשובה שמכריעה את ההמשך.</p>
+  <p class="hint">צלמו את הסיכום למעלה ואת השורות הירוקות — זה כל מה שאני צריך.</p>
 </div>
 
 <script>
 (function(){
   var out=document.getElementById('out');
-  var verdict=document.getElementById('verdict');
+  var summary=document.getElementById('summary');
   var goBtn=document.getElementById('go');
 
   function esc(s){return String(s).replace(/[&<>"']/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-  function stage(t){var d=document.createElement('div');d.className='stage';d.textContent=t;out.appendChild(d);}
-  function card(title,state,detail){
-    var tag=state==='ok'?'עובד':state==='no'?'חסום':'חלקי';
-    var d=document.createElement('div');
-    d.className='card';
-    d.innerHTML='<h2><span class="tag '+state+'">'+tag+'</span>'+esc(title)+'</h2><p>'+detail+'</p>';
-    out.appendChild(d);
-  }
 
   function videoId(raw){
     try{
@@ -89,152 +83,123 @@
     }catch(e){ return null; }
   }
 
-  function withTimeout(promise,ms){
+  function withTimeout(pr,ms){
     return new Promise(function(res,rej){
       var done=false;
-      var t=setTimeout(function(){ if(!done){done=true;rej(new Error('timeout '+ms+'ms'));} },ms);
-      promise.then(function(v){ if(!done){done=true;clearTimeout(t);res(v);} },
-                   function(e){ if(!done){done=true;clearTimeout(t);rej(e);} });
+      var t=setTimeout(function(){ if(!done){done=true;rej(new Error('timeout'));} },ms);
+      pr.then(function(v){ if(!done){done=true;clearTimeout(t);res(v);} },
+              function(e){ if(!done){done=true;clearTimeout(t);rej(e);} });
     });
   }
 
-  // Each source returns {url, label} for a single muxed (video+audio) stream,
-  // which is the only kind usable without stitching tracks together.
-  var SOURCES=[
-    {name:'Piped · private.coffee',api:function(id){return 'https://api.piped.private.coffee/streams/'+id;},  pick:pickPiped},
-    {name:'Piped · kavin.rocks',   api:function(id){return 'https://pipedapi.kavin.rocks/streams/'+id;},      pick:pickPiped},
-    {name:'Piped · adminforge.de', api:function(id){return 'https://pipedapi.adminforge.de/streams/'+id;},    pick:pickPiped},
-    {name:'Invidious · nadeko',    api:function(id){return 'https://inv.nadeko.net/api/v1/videos/'+id;},      pick:pickInv, host:'inv.nadeko.net'},
-    {name:'Invidious · nerdvpn',   api:function(id){return 'https://invidious.nerdvpn.de/api/v1/videos/'+id;},pick:pickInv, host:'invidious.nerdvpn.de'},
-    {name:'Invidious · yewtu.be',  api:function(id){return 'https://yewtu.be/api/v1/videos/'+id;},            pick:pickInv, host:'yewtu.be'}
+  var PIPED=[
+    'https://api.piped.private.coffee','https://pipedapi.kavin.rocks','https://pipedapi.adminforge.de',
+    'https://pipedapi.drgns.space','https://pipedapi.ducks.party','https://pipedapi.r4fo.com',
+    'https://pipedapi.leptons.xyz','https://pipedapi.reallyaweso.me','https://api.piped.yt',
+    'https://pipedapi.smnz.de','https://pipedapi.nosebs.ru','https://pipedapi.astartes.nl',
+    'https://pipedapi.osphost.fi','https://piped-api.lunar.icu','https://api.piped.projectsegfau.lt',
+    'https://pipedapi.phoenixthrush.com','https://pipedapi.darkness.services'
+  ];
+  var INVIDIOUS=[
+    'https://inv.nadeko.net','https://invidious.nerdvpn.de','https://yewtu.be',
+    'https://invidious.privacyredirect.com','https://iv.melmac.space','https://inv.tux.pizza',
+    'https://invidious.jing.rocks','https://invidious.f5.si','https://inv.us.projectsegfau.lt',
+    'https://invidious.reallyaweso.me','https://iv.datura.network','https://invidious.einfachzocken.eu'
   ];
 
-  // LBRY is a different network Piped also indexes, and its URLs need
-  // credentials we do not have — round 2 picked one by accident (smallest
-  // first) and got a 401 that looked like a wall but was a wrong turn.
-  function isUsable(url,format){
-    if(!url) return false;
-    var f=String(format||'').toUpperCase();
-    if(f.indexOf('LBRY')>=0) return false;
-    if(String(url).toLowerCase().indexOf('lbry')>=0) return false;
-    return /^https?:\/\//i.test(url);
+  function shortName(base){
+    try{ return new URL(base).hostname; }catch(e){ return base; }
   }
 
-  function pickPiped(j){
-    var s=(j&&j.videoStreams)||[];
-    var muxed=s.filter(function(x){return x.videoOnly===false && isUsable(x.url,x.format);});
-    muxed.sort(function(a,b){return (a.width||9999)-(b.width||9999);});
-    return muxed.map(function(x){
-      return {url:x.url, label:((x.quality||'')+' '+(x.format||'')).trim()};
-    });
+  function item(state,who,why){
+    var tag=state==='ok'?'פתוח':state==='no'?'סגור':'חסום';
+    var d=document.createElement('div');
+    d.className='item';
+    d.innerHTML='<span class="tag '+state+'">'+tag+'</span>'+
+                '<span class="who">'+esc(who)+'</span>'+
+                (why?'<span class="why">'+esc(why)+'</span>':'');
+    return d;
   }
-  function pickInv(j,id,host){
-    var list=[];
-    // The instance's own proxy endpoint, which is the CORS-friendly one —
-    // a raw googlevideo URL handed to a page is a different question entirely.
-    if(host) list.push({url:'https://'+host+'/latest_version?id='+encodeURIComponent(id)+'&itag=18&local=true',
-                        label:'דרך שרת הביניים (itag 18)'});
-    var s=(j&&j.formatStreams)||[];
-    s.forEach(function(x){
-      if(isUsable(x.url,x.container)) list.push({url:x.url,
-        label:((x.qualityLabel||'')+' '+(x.container||'')).trim()});
-    });
-    return list;
+
+  function probeOne(base,type,id){
+    var url=(type==='piped')
+      ? base+'/streams/'+encodeURIComponent(id)
+      : base+'/api/v1/videos/'+encodeURIComponent(id);
+    return withTimeout(fetch(url,{headers:{'Accept':'application/json'}}),9000)
+      .then(function(r){
+        return r.text().then(function(t){
+          var j=null; try{ j=JSON.parse(t); }catch(e){}
+          if(!r.ok){
+            var why=(j&&(j.error||j.message))||t.slice(0,50);
+            var botBlocked=/NotBot|LOGIN_REQUIRED|not a bot/i.test(String(why));
+            return {state:botBlocked?'maybe':'no', base:base, type:type,
+                    why:botBlocked?'יוטיוב חסמה את השרת':(r.status+' '+String(why).split('\n')[0].slice(0,40))};
+          }
+          var streams=(type==='piped')?((j&&j.videoStreams)||[]):((j&&j.formatStreams)||[]);
+          var usable=streams.filter(function(x){
+            return x&&x.url&&!/lbry|hls|m3u8/i.test(String(x.quality||'')+String(x.format||'')+String(x.container||''));
+          });
+          if(type==='invidious'&&j) usable=usable.concat([1]); // its own /latest_version endpoint always exists
+          if(!usable.length) return {state:'no', base:base, type:type, why:'בלי עותק שמיש'};
+          return {state:'ok', base:base, type:type, why:usable.length+' עותקים'};
+        });
+      })
+      .catch(function(e){
+        return {state:'no', base:base, type:type,
+                why:(e&&e.message==='timeout')?'לא הגיב בזמן':'לא נגיש'};
+      });
   }
 
   function run(){
-    out.innerHTML=''; verdict.className='verdict'; verdict.innerHTML='';
-    goBtn.disabled=true; goBtn.textContent='בודק...';
+    out.innerHTML=''; summary.className='summary'; summary.innerHTML='';
+    goBtn.disabled=true; goBtn.textContent='סורק...';
 
     var id=videoId(document.getElementById('url').value.trim());
     if(!id){
-      card('זיהוי הקישור','no','לא הצלחתי לחלץ מזהה סרטון מהכתובת.');
-      goBtn.disabled=false; goBtn.textContent='בדוק'; return;
+      out.innerHTML='<div class="list"><div class="item"><span class="tag no">שגיאה</span>לא זוהה מזהה סרטון</div></div>';
+      goBtn.disabled=false; goBtn.textContent='סרוק'; return;
     }
-    card('זיהוי הקישור','ok','מזהה הסרטון: <code>'+esc(id)+'</code>');
 
-    // Round 2 stopped at the first URL it found and reported its failure as the
-    // whole avenue's. Collect from every reachable relay instead, then try them
-    // in turn — one dead URL says nothing about the next.
-    var candidates=[];
-    var chain=Promise.resolve();
+    var all=PIPED.map(function(b){return {base:b,type:'piped'};})
+      .concat(INVIDIOUS.map(function(b){return {base:b,type:'invidious'};}));
 
-    stage('שלב 1 — אילו שרתי ביניים נגישים מהדפדפן?');
-    SOURCES.forEach(function(src){
-      chain=chain.then(function(){
-        return withTimeout(fetch(src.api(id),{headers:{'Accept':'application/json'}}),12000)
-          .then(function(r){
-            return r.text().then(function(t){
-              var j=null; try{ j=JSON.parse(t); }catch(e){}
-              if(!r.ok){ card(src.name,'no','HTTP '+r.status+' '+esc(t.slice(0,70))); return; }
-              var list=j?(src.pick(j,id,src.host)||[]):[];
-              list.forEach(function(x){ candidates.push({url:x.url,label:x.label,from:src.name}); });
-              if(list.length){
-                card(src.name,'ok','נגיש, ו-'+list.length+' כתובות וידאו שמישות ממנו.');
-              }else{
-                card(src.name,'maybe','נגיש, אבל בלי כתובת וידאו שמישה'+(j&&j.error?': '+esc(String(j.error).slice(0,60)):'')+'.');
-              }
-            });
-          })
-          .catch(function(e){
-            card(src.name,'no','לא נגיש מהדפדפן: <code>'+esc((e&&e.message)||e)+'</code>');
+    // A live directory would make the app self-maintaining instead of carrying
+    // a list that rots — worth knowing whether the browser can even read one.
+    var dirCheck=withTimeout(fetch('https://piped-instances.kavin.rocks/'),9000)
+      .then(function(r){ return r.ok?r.json():null; })
+      .then(function(j){ return Array.isArray(j)?j.length:null; })
+      .catch(function(){ return null; });
+
+    Promise.all(all.map(function(s){ return probeOne(s.base,s.type,id); }))
+      .then(function(results){
+        return dirCheck.then(function(dirCount){
+          var open=results.filter(function(r){return r.state==='ok';});
+          var blocked=results.filter(function(r){return r.state==='maybe';});
+
+          summary.className='summary show';
+          summary.innerHTML='<b>'+open.length+' שרתים פתוחים ועובדים</b> מתוך '+results.length+
+            ' · '+blocked.length+' נגישים אבל חסומים ע"י יוטיוב'+
+            '<div class="why" style="margin-top:6px;">רשימה חיה של שרתים: '+
+            (dirCount?('נגישה ('+dirCount+' שרתים) — אפשר לעדכן את האפליקציה אוטומטית'):'לא נגישה מהדפדפן')+
+            '</div>'+
+            (open.length?('<textarea class="copybox" readonly>'+
+              esc(open.map(function(r){return r.base;}).join('\n'))+'</textarea>'):'');
+
+          var order={ok:0,maybe:1,no:2};
+          results.sort(function(a,b){
+            return (order[a.state]-order[b.state]) || shortName(a.base).localeCompare(shortName(b.base));
           });
-      });
-    });
 
-    var winner=null;
-    chain=chain.then(function(){
-      stage('שלב 2 — האם אחת מהן באמת מורידה וידאו?');
-      if(!candidates.length){
-        card('משיכת הקובץ','no','לא הגענו לשלב הזה — אף שרת לא החזיר כתובת שמישה.');
-        return;
-      }
-      var tries=candidates.slice(0,6);
-      var seq=Promise.resolve();
-      tries.forEach(function(cand){
-        seq=seq.then(function(){
-          if(winner) return;
-          return withTimeout(fetch(cand.url,{headers:{Range:'bytes=0-4095'}}),20000)
-            .then(function(r){
-              return r.arrayBuffer().then(function(buf){
-                var b=new Uint8Array(buf);
-                var sig='';
-                for(var i=4;i<8&&i<b.length;i++) sig+=String.fromCharCode(b[i]);
-                var isMp4=(sig==='ftyp');
-                var isWebm=b.length>4&&b[0]===0x1A&&b[1]===0x45&&b[2]===0xDF&&b[3]===0xA3;
-                var name=cand.from+' — '+(cand.label||'וידאו');
-                if(r.ok&&(isMp4||isWebm)){
-                  winner=cand;
-                  card(name,'ok','ירדו '+b.length+' בייטים והם קובץ וידאו תקין ('+(isMp4?'MP4':'WebM')+'). <b>זה עובד.</b>');
-                }else if(r.ok){
-                  card(name,'maybe','HTTP '+r.status+', '+b.length+' בייטים — אבל לא נראה כמו וידאו.');
-                }else{
-                  card(name,'no','HTTP '+r.status+'.');
-                }
-              });
-            })
-            .catch(function(e){
-              card(cand.from+' — '+(cand.label||'וידאו'),'no','נחסם: <code>'+esc((e&&e.message)||e)+'</code>');
-            });
+          var stage=document.createElement('div');
+          stage.className='stage'; stage.textContent='כל השרתים שנבדקו';
+          out.appendChild(stage);
+          var list=document.createElement('div'); list.className='list';
+          results.forEach(function(r){ list.appendChild(item(r.state,shortName(r.base),r.why)); });
+          out.appendChild(list);
+
+          goBtn.disabled=false; goBtn.textContent='סרוק שוב';
         });
       });
-      return seq;
-    });
-
-    chain.then(function(){
-      verdict.className='verdict show';
-      if(winner){
-        verdict.innerHTML='<b>הדרך פתוחה ✅</b>הדפדפן שלכם הוריד וידאו אמיתי דרך <b>'+esc(winner.from)+'</b>. '+
-          'אפשר לבנות תמיכה ביוטיוב שרצה כולה במכשיר — בלי שרת שלנו, בלי חשבון ובלי תחזוקה.';
-      }else if(candidates.length){
-        verdict.innerHTML='<b>חצי הדרך ⚠️</b>קיבלנו '+candidates.length+' כתובות וידאו, אבל אף אחת מהן לא נמשכה. '+
-          'הצוואר הוא ההורדה עצמה, לא הגישה לשרתים.';
-      }else{
-        verdict.innerHTML='<b>חסום ❌</b>אף שרת ביניים לא החזיר כתובת שמישה. '+
-          'הכיוון הזה סגור — נעבור לדרך הקוקיז מחשבון ייעודי.';
-      }
-      goBtn.disabled=false; goBtn.textContent='בדוק שוב';
-    });
   }
 
   goBtn.onclick=run;
